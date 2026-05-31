@@ -1,0 +1,235 @@
+# Deployment Guide
+
+This guide covers local development, Docker Compose deployment, reverse proxy
+operation, and the host permissions required by the supported probe types.
+
+## Requirements
+
+- Python 3.11 or newer for local runs.
+- `uv` for Python dependency management.
+- `just` for local command recipes.
+- Docker and Docker Compose for container deployment.
+- Network utilities for the probe types you enable:
+  - `ping` or `ping6` for ICMP.
+  - `ssh` for SSH relay probes.
+  - `snmpping` for SNMP relay probes.
+  - `ip` for Linux netns and VRF probes.
+  - `hping3` only if a TCP target is configured with `method: hping3`.
+
+The Docker image installs the common system tools used by the app: `ping`,
+`hping3`, `iproute2`, `openssh-client`, and `snmp`.
+
+SNMP relay probes execute `snmpping`. If your base image or host package set
+does not provide that binary, install it before enabling SNMP targets.
+
+## Local Deployment
+
+Install dependencies and validate the default config:
+
+```sh
+uv sync
+just check
+```
+
+Run the app on localhost:
+
+```sh
+just run
+```
+
+Run on all interfaces:
+
+```sh
+just run 0.0.0.0 8000 deadmon.conf
+```
+
+Open `http://127.0.0.1:8000`.
+
+The `just run` recipe expands to:
+
+```sh
+uv run deadmon --host 127.0.0.1 --port 8000 deadmon.conf
+```
+
+## Docker Compose Deployment
+
+Build and run:
+
+```sh
+just docker-up
+```
+
+The service listens on host port `8000` by default. The compose file bind-mounts
+`./deadmon.conf` into the container as `/app/deadmon.conf`.
+
+The compose file also attaches the service to a user-defined bridge network with
+IPv6 address assignment enabled:
+
+```yaml
+networks:
+  deadmon:
+    driver: bridge
+    enable_ipv6: true
+```
+
+Docker must still be able to create IPv6-enabled networks on the host. On modern
+Linux Docker Engine, Docker can allocate a Unique Local Address subnet for that
+network automatically. If your Docker daemon is older or centrally configured
+with explicit address pools, enable IPv6 in Docker's daemon configuration and
+provide an IPv6 pool or fixed subnet that does not conflict with your site
+addressing. After changing daemon settings, restart Docker and recreate the
+Deadmon network:
+
+```sh
+docker compose down
+docker compose up --build
+```
+
+Validate the compose file:
+
+```sh
+just docker-config
+```
+
+Build without starting the container:
+
+```sh
+just docker-build
+```
+
+## Alert Webhooks
+
+Slack and Webex webhook URLs should be passed as environment variables instead
+of being committed to the config file.
+
+Set `app.public_url` when Deadmon is available through a reverse proxy so alert
+messages can link back to the dashboard:
+
+```yaml
+app:
+  public_url: https://deadmon.example.net/
+```
+
+Example shell environment:
+
+```sh
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+export WEBEX_WEBHOOK_URL="https://webexapis.com/v1/webhooks/incoming/..."
+just docker-up
+```
+
+Then enable the channel in `deadmon.conf`:
+
+```yaml
+alerts:
+  enabled: true
+  threshold: 3
+  clear_threshold: 2
+  channels:
+    - name: slack-noc
+      type: slack
+      enabled: true
+      webhook_url_env: SLACK_WEBHOOK_URL
+```
+
+An active notification is sent after `threshold` consecutive failed probes. A
+cleared notification is sent after `clear_threshold` consecutive successful
+probes.
+
+## Reverse Proxy
+
+Deadmon assumes it will normally run behind a reverse proxy. The CLI enables
+uvicorn proxy header support by default.
+
+Example Nginx location:
+
+```nginx
+location /deadmon/ {
+    proxy_pass http://127.0.0.1:8000/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+If the app is mounted under a path prefix, configure the proxy to strip the
+prefix before forwarding requests to Deadmon. The example above maps
+`/deadmon/` externally to `/` on the app.
+
+You can also pass the external prefix with `--root-path` so uvicorn records the
+deployment prefix in the ASGI scope:
+
+```sh
+uv run deadmon --host 127.0.0.1 --port 8000 --root-path /deadmon deadmon.conf
+```
+
+For Docker Compose, add `DEADMON_ROOT_PATH` or override the command. The proxy
+should still forward paths in the form Deadmon serves: `/`, `/assets/...`, and
+`/api/...`.
+
+## Probe Permissions
+
+Direct ICMP requires permission to send ping packets. The default compose file
+adds `NET_RAW` and explicitly keeps IPv6 enabled inside the container namespace:
+
+```yaml
+sysctls:
+  net.ipv6.conf.all.disable_ipv6: "0"
+  net.ipv6.conf.default.disable_ipv6: "0"
+cap_add:
+  - NET_RAW
+```
+
+If IPv4 targets work but IPv6 targets fail only in Docker, verify container IPv6
+routing from inside the running service:
+
+```sh
+docker compose exec deadmon ip -6 addr
+docker compose exec deadmon ip -6 route
+docker compose exec deadmon ping -6 -c 1 2001:4860:4860::8888
+```
+
+The ping check is also available as:
+
+```sh
+just docker-ipv6-check
+```
+
+If the container has no global or ULA IPv6 address, or no IPv6 default route,
+the Docker daemon/network is not providing IPv6 to containers yet.
+
+Linux netns and VRF probes may need additional privileges, host networking, or
+mounts depending on how namespaces and VRFs are exposed on the host. Start with:
+
+```yaml
+cap_add:
+  - NET_RAW
+  - NET_ADMIN
+```
+
+Then add only the host mounts your environment requires.
+
+TCP probes use a normal TCP connect by default and do not require raw socket
+permissions. If you explicitly set `method: hping3`, raw socket permissions are
+required.
+
+## Health Checks
+
+Use `/api/health` for service health:
+
+```sh
+curl -fsS http://127.0.0.1:8000/api/health
+```
+
+The endpoint returns HTTP 200 when the monitor loop is healthy. It returns HTTP
+503 if the monitor has recorded a runtime error.
+
+## Production Checklist
+
+- Replace the sample targets in `deadmon.conf`.
+- Run `just check` before deployment.
+- Store Slack and Webex webhook URLs in environment variables or a secret store.
+- Confirm the container has the capabilities required for your probe types.
+- Put authentication and TLS at the reverse proxy layer.
+- Monitor `/api/health` from your platform or load balancer.

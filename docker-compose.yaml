@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2018 Interop Tokyo ShowNet NOC team
+# Copyright (c) 2026 deadmon contributors
+# Based on the original deadman work by upa@haeena.net.
+
+services:
+  deadmon:
+    build: .
+    image: deadmon:local
+    container_name: deadmon
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DEADMON_CONFIG: /app/deadmon.conf
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      WEBEX_WEBHOOK_URL: ${WEBEX_WEBHOOK_URL:-}
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: "0"
+      net.ipv6.conf.default.disable_ipv6: "0"
+    cap_add:
+      - NET_RAW
+      # Enable NET_ADMIN and host-specific mounts if you use netns or VRF probes.
+      # - NET_ADMIN
+    volumes:
+      - ./deadmon.conf:/app/deadmon.conf:ro
+    networks:
+      - deadmon
+
+networks:
+  deadmon:
+    driver: bridge
+    enable_ipv6: true
