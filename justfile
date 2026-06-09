@@ -30,7 +30,7 @@ install:
 dev-install:
     uv sync --all-extras
 
-# Run all QA checks (linting, formatting, tests, and config validation)
+# Run all QA checks
 [group('qa')]
 check:
     uv run python -m py_compile {{python_files}}
@@ -39,7 +39,7 @@ check:
     just test
     uv run deadmon --check-config deadmon.conf
 
-# Run code linting (use with --fix to automatically fix issues, but review changes before committing)
+# Run code linting
 [group('qa')]
 lint:
     uv run ruff check {{python_files}}
@@ -49,7 +49,7 @@ lint:
 format-check:
     uv run ruff format --check {{python_files}}
 
-# Automatically fix formatting issues (use with caution, review changes before committing)
+# Automatically fix formatting issues
 [group('qa')]
 format:
     uv run ruff check --fix {{python_files}}
@@ -60,22 +60,22 @@ format:
 test:
     uv run python -m unittest discover -s tests
 
-# Dump the configuration file to stdout (useful for debugging config issues)
+# Dump the configuration file to stdout
 [group('config')]
 dump-config:
     uv run deadmon --dump-config deadmon.conf
 
-# Convert the configuration file and print the output to stdout (useful for debugging config issues)
+# Convert the configuration file and print the output to stdout
 [group('config')]
 convert-config input="deadmon.conf":
     uv run python bin/deadmon-convert-config {{input}}
 
-# Convert the configuration file and save the output to a new file (useful for converting old configs to new formats)
+# Convert the configuration file and save the output to a new file
 [group('config')]
 convert-config-to input output:
     uv run python bin/deadmon-convert-config {{input}} --output {{output}}
 
-# Run the deadmon server (make sure to adjust host, port, and config path as needed)
+# Run the deadmon server
 [group('run')]
 run host="127.0.0.1" port="8000" config="deadmon.conf":
     uv run deadmon --host {{host}} --port {{port}} {{config}}
@@ -97,7 +97,7 @@ distclean:
 [confirm("This will delete and recreate the entire virtual environment. Continue?")]
 fresh: clean dev-install
 
-# Generate the Docker Compose configuration (useful for debugging the compose file without running it)
+# Generate the Docker Compose configuration
 [group('qa')]
 docker-config:
     docker compose config
@@ -118,7 +118,7 @@ docker-publish:
     docker login
     docker buildx build --platform linux/amd64,linux/arm64 -t xorrkaz/deadmon:latest -t xorrkaz/deadmon:$(uv version --short) --push .
 
-# Publish the Python package to PyPi (requires a PyPi token)
+# Publish the Python package to PyPi
 [group('publish')]
 pypi-publish: build
     @echo -n PyPi Token: ; \
@@ -131,12 +131,12 @@ pypi-publish: build
 [group('publish')]
 publish: build docker-build pypi-publish docker-publish
 
-# Load the Docker image locally (for testing without pushing to Docker Hub)
+# Load the Docker image into the local image cache
 [group('run')]
 docker-load:
     docker buildx build --platform linux/amd64,linux/arm64 -t xorrkaz/deadmon:latest -t xorrkaz/deadmon:$(uv version --short) --load .
 
-# Run the Docker container (make sure to adjust volume mounts and ports as needed)
+# Run the Docker container
 [group('run')]
 docker-up:
     docker compose up --build -d
