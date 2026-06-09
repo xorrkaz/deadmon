@@ -192,6 +192,30 @@ Run on a custom address and port:
 just run 0.0.0.0 8080 deadmon.conf
 ```
 
+Build the Docker image locally:
+
+```sh
+just docker-build
+```
+
+Publish the Python package to PyPI:
+
+```sh
+just pypi-publish
+```
+
+Publish the Docker image to Docker Hub:
+
+```sh
+just docker-publish
+```
+
+Stop the Docker Compose deployment:
+
+```sh
+just docker-down
+```
+
 ## CLI Options
 
 The console entry point is `deadmon`.

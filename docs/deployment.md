@@ -19,6 +19,8 @@ operation, and the host permissions required by the supported probe types.
 The Docker image installs the common system tools used by the app: `ping`,
 `hping3`, `iproute2`, `openssh-client`, and `snmp`.
 
+The published Docker Hub image is available as `xorrkaz/deadmon`.
+
 SNMP relay probes execute `snmpping`. If your base image or host package set
 does not provide that binary, install it before enabling SNMP targets.
 
@@ -61,6 +63,49 @@ just docker-up
 
 The service listens on host port `8000` by default. The compose file bind-mounts
 `./deadmon.conf` into the container as `/app/deadmon.conf`.
+
+## Docker Hub Image
+
+Run the published image directly without building locally:
+
+```sh
+docker run --rm -p 8000:8000 xorrkaz/deadmon
+```
+
+If you want to mount a configuration file, use:
+
+```sh
+docker run --rm -p 8000:8000 -v "$(pwd)/deadmon.conf:/app/deadmon.conf:ro" xorrkaz/deadmon
+```
+
+The published image uses the same runtime environment and should work with the
+same host capabilities and network configuration notes described below.
+
+## Publishing
+
+Build the Docker image locally:
+
+```sh
+just docker-build
+```
+
+Publish the Docker image to Docker Hub:
+
+```sh
+just docker-publish
+```
+
+Publish the Python package to PyPI:
+
+```sh
+just pypi-publish
+```
+
+Run the full publish workflow (build + PyPI + Docker Hub):
+
+```sh
+just publish
+```
 
 The compose file also attaches the service to a user-defined bridge network with
 IPv6 address assignment enabled:
