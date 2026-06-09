@@ -3,4 +3,9 @@ __pycache__/
 .venv/
 .git/
 .DS_Store
-netwatch · print export.pdf
+.vscode
+justfile
+Dockerfile
+docker-compose.yaml
+.envrc
+dist

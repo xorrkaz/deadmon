@@ -11,23 +11,20 @@ build-backend = "hatchling.build"
 name = "deadmon"
 version = "1.0.0"
 description = "Web-native reachability monitor based on the original deadman work."
+authors = [{name = "Joe Clarke", email = "jclarke@marcuscom.com"}]
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-classifiers = [
-    "License :: OSI Approved :: MIT License",
-]
-dependencies = [
-    "PyYAML>=6.0,<7",
-    "uvicorn[standard]>=0.30,<1",
-]
+classifiers = ["License :: OSI Approved :: MIT License"]
+dependencies = ["PyYAML>=6.0,<7", "uvicorn[standard]>=0.30,<1"]
+
+[project.urls]
+Homepage = "https://github.com/xorrkaz/deadmon"
+Issues = "https://github.com/xorrkaz/deadmon/issues"
 
 [dependency-groups]
-dev = [
-    "black>=25.0,<26",
-    "ruff>=0.8,<1",
-]
+dev = ["ruff>=0.8,<1",]
 
 [project.scripts]
 deadmon = "deadmon.cli:main"
@@ -35,14 +32,19 @@ deadmon = "deadmon.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["deadmon"]
 
-[tool.black]
-line-length = 100
-target-version = ["py311"]
-
 [tool.ruff]
-line-length = 100
+line-length = 140
 target-version = "py311"
+extend-include = ["bin/deadmon", "bin/deadmon-convert-config"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["deadmon"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

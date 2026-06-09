@@ -74,9 +74,7 @@ class AlertDisableTests(TestCase):
         )
 
         normal_alerts = effective_alert_config(target_by_name(config, "normal-router"), config)
-        disabled_alerts = effective_alert_config(
-            target_by_name(config, "maintenance-router"), config
-        )
+        disabled_alerts = effective_alert_config(target_by_name(config, "maintenance-router"), config)
 
         self.assertTrue(normal_alerts.enabled)
         self.assertFalse(disabled_alerts.enabled)

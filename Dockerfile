@@ -32,7 +32,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY deadmon ./deadmon
 COPY bin ./bin
-COPY deadmon.conf README.md LICENSE ./
+COPY README.md LICENSE ./
 RUN chmod +x /app/bin/deadmon /app/bin/deadmon-convert-config
 RUN uv sync --frozen --no-dev
 EXPOSE 8000

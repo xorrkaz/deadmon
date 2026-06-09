@@ -46,9 +46,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--reload", action="store_true", help="enable uvicorn auto-reload")
     parser.add_argument("--check-config", action="store_true", help="validate config and exit")
-    parser.add_argument(
-        "--dump-config", action="store_true", help="print sanitized parsed config and exit"
-    )
+    parser.add_argument("--dump-config", action="store_true", help="print sanitized parsed config and exit")
     return parser.parse_args()
 
 
@@ -68,10 +66,7 @@ def main() -> int:
         if args.dump_config:
             print(json.dumps(public_config(config), indent=2))
         else:
-            print(
-                f"deadmon: ok - {len(config.targets)} targets across "
-                f"{len(config.groups)} groups, {config.poll_interval}s cadence"
-            )
+            print(f"deadmon: ok - {len(config.targets)} targets across {len(config.groups)} groups, {config.poll_interval}s cadence")
         return 0
 
     try:

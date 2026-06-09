@@ -553,9 +553,7 @@ class ProbeRunner:
         password = relay.get("password")
         relay_host = relay.get("relay")
         if not username or not password:
-            return ProbeResult(
-                code=PING_FAILED, message="routeros_api requires username and password"
-            )
+            return ProbeResult(code=PING_FAILED, message="routeros_api requires username and password")
         if not relay_host:
             return ProbeResult(code=PING_FAILED, message="routeros_api relay is missing relay")
 
@@ -585,9 +583,7 @@ class ProbeRunner:
         packet_loss = str(details[0].get("packet-loss", "100")).strip().rstrip("%")
         try:
             if int(packet_loss) > 0:
-                return ProbeResult(
-                    code=PING_FAILED, message=f"routeros_api packet loss {packet_loss}%"
-                )
+                return ProbeResult(code=PING_FAILED, message=f"routeros_api packet loss {packet_loss}%")
         except ValueError:
             return ProbeResult(code=PING_FAILED, message=f"routeros_api packet loss {packet_loss}")
 
@@ -616,13 +612,9 @@ class AlertManager:
         if not enabled_channels:
             return []
 
-        return await asyncio.gather(
-            *[self._notify_channel(channel, transition) for channel in enabled_channels]
-        )
+        return await asyncio.gather(*[self._notify_channel(channel, transition) for channel in enabled_channels])
 
-    async def _notify_channel(
-        self, channel: AlertChannel, transition: AlertTransition
-    ) -> dict[str, Any]:
+    async def _notify_channel(self, channel: AlertChannel, transition: AlertTransition) -> dict[str, Any]:
         url = channel.resolved_url()
         if not url:
             return {
@@ -721,15 +713,11 @@ class AlertManager:
         severity = alert_severity(transition)
         if transition.action == "active":
             streak = f"{transition.consecutive_down} consecutive failed probes"
-            state_line = (
-                f"**{transition.target_name}** is unreachable from **{transition.group_name}**"
-            )
+            state_line = f"**{transition.target_name}** is unreachable from **{transition.group_name}**"
             status_value = f"{severity['webex_state_icon']} Active outage"
         else:
             streak = f"{transition.consecutive_up} consecutive successful probes"
-            state_line = (
-                f"**{transition.target_name}** is reachable again from **{transition.group_name}**"
-            )
+            state_line = f"**{transition.target_name}** is reachable again from **{transition.group_name}**"
             status_value = f"{severity['webex_state_icon']} Cleared"
 
         lines = [
@@ -847,9 +835,7 @@ class MonitorService:
             self.last_tick_duration_ms = (time.perf_counter() - started) * 1000.0
 
         for transition, alert_config in transitions:
-            deliveries = await AlertManager(
-                alert_config, app_name=self.config.name, public_url=self.config.public_url
-            ).notify(transition)
+            deliveries = await AlertManager(alert_config, app_name=self.config.name, public_url=self.config.public_url).notify(transition)
             async with self._lock:
                 self.alert_log.appendleft(
                     {
@@ -868,9 +854,7 @@ class MonitorService:
             targets = []
             for target in self.config.targets:
                 target_snapshot = self.states[target.stable_id].snapshot()
-                target_snapshot["alerts"] = public_alert_config(
-                    effective_alert_config(target, self.config)
-                )
+                target_snapshot["alerts"] = public_alert_config(effective_alert_config(target, self.config))
                 targets.append(target_snapshot)
 
         target_by_id = {target["id"]: target for target in targets}
@@ -882,12 +866,8 @@ class MonitorService:
                     "id": group.group_id,
                     "name": group.name,
                     "description": group.description,
-                    "latency_warning_ms": clean_float(
-                        effective_group_latency_warning_ms(group, self.config)
-                    ),
-                    "latency_critical_ms": clean_float(
-                        effective_group_latency_critical_ms(group, self.config)
-                    ),
+                    "latency_warning_ms": clean_float(effective_group_latency_warning_ms(group, self.config)),
+                    "latency_critical_ms": clean_float(effective_group_latency_critical_ms(group, self.config)),
                     "alerts": public_alert_config(effective_group_alert_config(group, self.config)),
                     **status_totals(group_targets),
                 }
@@ -952,9 +932,7 @@ class DeadmonASGI:
         elif method == "GET" and path == "/api/health":
             snapshot = await self.monitor.snapshot()
             status = 200 if snapshot["app"]["last_error"] is None else 503
-            await send_json(
-                send, {"ok": status == 200, "last_error": snapshot["app"]["last_error"]}, status
-            )
+            await send_json(send, {"ok": status == 200, "last_error": snapshot["app"]["last_error"]}, status)
         elif method == "GET" and path == "/api/config":
             await send_json(send, public_config(self.config))
         else:
@@ -1050,9 +1028,7 @@ def normalize_config(raw: dict[str, Any], path: Path) -> DeadmonConfig:
             latency_critical_ms=optional_float(raw_group.get("latency_critical_ms")),
             alerts=normalize_group_alerts(raw_group, group_name),
         )
-        for raw_target in as_config_list(
-            raw_group.get("targets", []), f"group {group_name} targets"
-        ):
+        for raw_target in as_config_list(raw_group.get("targets", []), f"group {group_name} targets"):
             group.targets.append(normalize_target(raw_target, group))
         groups.append(group)
 
@@ -1119,9 +1095,7 @@ def normalize_alert_override(raw_alerts: Any, context: str) -> AlertOverride:
 
 def normalize_alert_channels(raw_channels: Any, context: str) -> list[AlertChannel]:
     channels = []
-    for index, raw_channel in enumerate(
-        as_config_list(raw_channels, f"{context} channels"), start=1
-    ):
+    for index, raw_channel in enumerate(as_config_list(raw_channels, f"{context} channels"), start=1):
         if not isinstance(raw_channel, dict):
             raise ConfigError(f"{context} channels must be objects")
         validate_allowed_keys(raw_channel, ALERT_CHANNEL_KEYS, f"{context} channel {index}")
@@ -1590,12 +1564,8 @@ def public_config(config: DeadmonConfig) -> dict[str, Any]:
                 "id": group.group_id,
                 "name": group.name,
                 "description": group.description,
-                "latency_warning_ms": clean_float(
-                    effective_group_latency_warning_ms(group, config)
-                ),
-                "latency_critical_ms": clean_float(
-                    effective_group_latency_critical_ms(group, config)
-                ),
+                "latency_warning_ms": clean_float(effective_group_latency_warning_ms(group, config)),
+                "latency_critical_ms": clean_float(effective_group_latency_critical_ms(group, config)),
                 "alerts": public_alert_config(effective_group_alert_config(group, config)),
                 "targets": [
                     {
@@ -1606,12 +1576,8 @@ def public_config(config: DeadmonConfig) -> dict[str, Any]:
                         "relay": public_relay(target.relay),
                         "source": target.source,
                         "tcp": public_tcp(target.tcp),
-                        "latency_warning_ms": clean_float(
-                            effective_latency_warning_ms(target, config)
-                        ),
-                        "latency_critical_ms": clean_float(
-                            effective_latency_critical_ms(target, config)
-                        ),
+                        "latency_warning_ms": clean_float(effective_latency_warning_ms(target, config)),
+                        "latency_critical_ms": clean_float(effective_latency_critical_ms(target, config)),
                         "alerts": public_alert_config(effective_alert_config(target, config)),
                     }
                     for target in group.targets
@@ -1755,7 +1721,8 @@ INDEX_HTML = """<!doctype html>
       <span id="clock-date">----</span>
     </div>
     <div class="controls">
-      <button class="rotation-button" id="rotation-toggle" type="button" aria-label="Pause tab rotation" title="Pause tab rotation">||</button>
+      <button class="rotation-button" id="rotation-toggle" type="button" aria-label="Pause tab rotation" title="Pause tab rotation">||
+      </button>
       <button class="theme-button" id="theme-toggle" type="button" aria-label="Toggle theme">Dark</button>
     </div>
   </header>
@@ -2486,7 +2453,8 @@ function render(data) {
   els.appName.textContent = data.app.name;
   els.appMeta.textContent = `${data.app.version} - ${shortPath(data.app.config_path)}`;
   els.liveMeta.textContent =
-    `LIVE - ${data.totals.total} ${targetWord.toLowerCase()} - ${formatSeconds(data.app.poll_interval)} cadence - ${formatSeconds(data.app.tab_rotation_interval)} tabs`;
+    `LIVE - ${data.totals.total} ${targetWord.toLowerCase()} - ${formatSeconds(data.app.poll_interval)} cadence - \
+        ${formatSeconds(data.app.tab_rotation_interval)} tabs`;
   els.upCount.textContent = data.totals.up;
   els.degradedCount.textContent = data.totals.degraded;
   els.downCount.textContent = data.totals.down;
@@ -2558,7 +2526,8 @@ function renderTarget(target, retainResults) {
     <div class="target-address">${escapeHtml(target.address)}</div>
     <div class="target-note">${escapeHtml(note)}</div>
     <div class="history">${renderHistory(target.history, retainResults)}</div>
-    <div class="metric rtt latency-${target.latency_state}" title="${escapeHtml(rttTitle)}"><strong>${latest}</strong><span> ms</span><div class="target-sub">avg ${avg}</div></div>
+    <div class="metric rtt latency-${target.latency_state}" title="${escapeHtml(rttTitle)}"><strong>${latest}</strong><span> ms</span>
+    <div class="target-sub">avg ${avg}</div></div>
     <div class="metric loss"><strong>${target.loss_rate.toFixed(0)}%</strong><div class="target-sub">${target.sent} snt</div></div>
   `;
   return row;
@@ -2647,7 +2616,8 @@ function renderHistory(history, retainResults) {
   const pips = history.map((item) => {
     const state = item.latency_state || (item.success ? "ok" : "lost");
     const label = item.success ? `${formatMs(item.rtt_ms)} ms - ${latencyStateLabel(state)}` : `lost - ${item.code}`;
-    return `<span class="pip level-${item.level} latency-${state}" style="--pip-height: ${pipHeight(item)}px" title="${escapeHtml(label)}"></span>`;
+    return `<span class="pip level-${item.level} latency-${state}" style="--pip-height: ${pipHeight(item)}px" title="${escapeHtml(label)}">\
+    </span>`;
   });
   return empty.concat(pips).join("");
 }
