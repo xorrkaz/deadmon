@@ -198,16 +198,10 @@ Build the Docker image locally:
 just docker-build
 ```
 
-Publish the Python package to PyPI:
+Load the Docker image locally:
 
 ```sh
-just pypi-publish
-```
-
-Publish the Docker image to Docker Hub:
-
-```sh
-just docker-publish
+just docker-load
 ```
 
 Stop the Docker Compose deployment:
