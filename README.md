@@ -11,6 +11,20 @@ Linux netns/VRF, RouterOS REST API ping, and TCP reachability checks.
 - [Usage guide](docs/usage.md)
 - [Configuration reference](docs/configuration.md)
 
+## Install
+
+Install from PyPI:
+
+```sh
+pip install deadmon
+```
+
+Run using the Docker Hub image:
+
+```sh
+docker run --rm -p 8000:8000 xorrkaz/deadmon
+```
+
 ## Run locally
 
 ```sh
