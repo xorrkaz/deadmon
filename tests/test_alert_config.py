@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2018 Interop Tokyo ShowNet NOC team
-# Copyright (c) 2026 deadmon contributors
+# Copyright (c) 2026 Joe Clarke <jclarke@marcuscom.com>
 # Based on the original deadman work by upa@haeena.net.
 
 from pathlib import Path
@@ -40,12 +40,16 @@ class AlertDisableTests(TestCase):
             Path("test.yaml"),
         )
 
-        target_alerts = effective_alert_config(target_by_name(config, "lab-router"), config)
+        target_alerts = effective_alert_config(
+            target_by_name(config, "lab-router"), config
+        )
 
         self.assertFalse(target_alerts.enabled)
         self.assertEqual(target_alerts.threshold, 3)
         self.assertEqual(target_alerts.clear_threshold, 2)
-        self.assertEqual([channel.name for channel in target_alerts.channels], ["global-slack"])
+        self.assertEqual(
+            [channel.name for channel in target_alerts.channels], ["global-slack"]
+        )
 
     def test_target_can_disable_app_level_alerts(self):
         config = normalize_config(
@@ -73,8 +77,12 @@ class AlertDisableTests(TestCase):
             Path("test.yaml"),
         )
 
-        normal_alerts = effective_alert_config(target_by_name(config, "normal-router"), config)
-        disabled_alerts = effective_alert_config(target_by_name(config, "maintenance-router"), config)
+        normal_alerts = effective_alert_config(
+            target_by_name(config, "normal-router"), config
+        )
+        disabled_alerts = effective_alert_config(
+            target_by_name(config, "maintenance-router"), config
+        )
 
         self.assertTrue(normal_alerts.enabled)
         self.assertFalse(disabled_alerts.enabled)
@@ -109,11 +117,15 @@ class AlertDisableTests(TestCase):
             Path("test.yaml"),
         )
 
-        target_alerts = effective_alert_config(target_by_name(config, "suppressed-router"), config)
+        target_alerts = effective_alert_config(
+            target_by_name(config, "suppressed-router"), config
+        )
 
         self.assertFalse(target_alerts.enabled)
         self.assertEqual(target_alerts.threshold, 2)
-        self.assertEqual([channel.name for channel in target_alerts.channels], ["wan-webex"])
+        self.assertEqual(
+            [channel.name for channel in target_alerts.channels], ["wan-webex"]
+        )
 
     def test_public_config_exposes_effective_disabled_alerts(self):
         config = normalize_config(

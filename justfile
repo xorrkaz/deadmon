@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2018 Interop Tokyo ShowNet NOC team
-# Copyright (c) 2026 deadmon contributors
+# Copyright (c) 2026 Joe Clarke <jclarke@marcuscom.com>
 # Based on the original deadman work by upa@haeena.net.
 
 set dotenv-load

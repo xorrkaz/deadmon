@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run python
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2018 Interop Tokyo ShowNet NOC team
-# Copyright (c) 2026 deadmon contributors
+# Copyright (c) 2026 Joe Clarke <jclarke@marcuscom.com>
 # Based on the original deadman work by upa@haeena.net.
 
 from __future__ import annotations
@@ -67,7 +67,9 @@ def main() -> int:
         raw_config = parse_config_text(text)
         config_path = Path(source_label)
         config = normalize_config(raw_config, config_path)
-        yaml_text = dump_yaml(config, source_label=source_label, include_header=not args.no_header)
+        yaml_text = dump_yaml(
+            config, source_label=source_label, include_header=not args.no_header
+        )
         write_output(args.output, yaml_text, force=args.force)
     except (ConfigError, OSError, ValueError, yaml.YAMLError) as exc:
         print(f"deadmon-convert-config: {exc}", file=sys.stderr)
@@ -89,7 +91,9 @@ def write_output(path: str, text: str, force: bool) -> None:
 
     output_path = Path(path)
     if output_path.exists() and not force:
-        raise ValueError(f"output already exists: {output_path} (use --force to overwrite)")
+        raise ValueError(
+            f"output already exists: {output_path} (use --force to overwrite)"
+        )
     output_path.write_text(text, encoding="utf-8")
 
 
@@ -129,7 +133,9 @@ def config_to_yaml_data(config: DeadmonConfig) -> dict[str, Any]:
             "enabled": config.alerts.enabled,
             "threshold": config.alerts.threshold,
             "clear_threshold": config.alerts.clear_threshold,
-            "channels": [alert_channel_to_dict(channel) for channel in config.alerts.channels],
+            "channels": [
+                alert_channel_to_dict(channel) for channel in config.alerts.channels
+            ],
         },
         "groups": [group_to_dict(group) for group in config.groups],
     }
@@ -203,7 +209,9 @@ def alert_override_to_dict(alerts: AlertOverride) -> dict[str, Any]:
     if alerts.clear_threshold is not None:
         data["clear_threshold"] = alerts.clear_threshold
     if alerts.channels is not None:
-        data["channels"] = [alert_channel_to_dict(channel) for channel in alerts.channels]
+        data["channels"] = [
+            alert_channel_to_dict(channel) for channel in alerts.channels
+        ]
     return data
 
 
