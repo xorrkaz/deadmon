@@ -5,8 +5,7 @@
 
 services:
   deadmon:
-    build: .
-    image: deadmon:local
+    image: xorrkaz/deadmon:latest
     container_name: deadmon
     restart: unless-stopped
     ports:
