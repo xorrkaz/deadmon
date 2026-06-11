@@ -9,7 +9,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "deadmon"
-version = "1.0.0"
+version = "1.0.1"
 description = "Web-native reachability monitor based on the original deadman work."
 authors = [{name = "Joe Clarke", email = "jclarke@marcuscom.com"}]
 readme = "README.md"
