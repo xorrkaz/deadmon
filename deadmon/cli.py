@@ -44,12 +44,8 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("FORWARDED_ALLOW_IPS", "*"),
         help="uvicorn forwarded_allow_ips value for reverse proxy deployments",
     )
-    parser.add_argument(
-        "--reload", action="store_true", help="enable uvicorn auto-reload"
-    )
-    parser.add_argument(
-        "--check-config", action="store_true", help="validate config and exit"
-    )
+    parser.add_argument("--reload", action="store_true", help="enable uvicorn auto-reload")
+    parser.add_argument("--check-config", action="store_true", help="validate config and exit")
     parser.add_argument(
         "--dump-config",
         action="store_true",
@@ -67,18 +63,14 @@ def main() -> int:
             from deadmon.app import load_config, public_config
 
             config = load_config(args.config)
-        except (
-            Exception
-        ) as exc:  # noqa: BLE001 - CLI should show config/import errors plainly
+        except Exception as exc:  # noqa: BLE001 - CLI should show config/import errors plainly
             print(f"deadmon: config error: {exc}", file=sys.stderr)
             return 2
 
         if args.dump_config:
             print(json.dumps(public_config(config), indent=2))
         else:
-            print(
-                f"deadmon: ok - {len(config.targets)} targets across {len(config.groups)} groups, {config.poll_interval}s cadence"
-            )
+            print(f"deadmon: ok - {len(config.targets)} targets across {len(config.groups)} groups, {config.poll_interval}s cadence")
         return 0
 
     try:

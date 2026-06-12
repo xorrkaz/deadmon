@@ -285,11 +285,7 @@ class TargetState:
             return "pending"
         if self.alert_active and not self.up:
             return "down"
-        if (
-            self.alert_active
-            or not self.up
-            or self.latest_latency_state in {"warn", "critical"}
-        ):
+        if self.alert_active or not self.up or self.latest_latency_state in {"warn", "critical"}:
             return "degraded"
         return "up"
 
@@ -450,15 +446,11 @@ class ProbeRunner:
         osname = target.osname or target.relay.get("os") or platform.system()
         ip_version = which_ip_version(target.address)
         if not ip_version:
-            return ProbeResult(
-                code=PING_FAILED, message=f"cannot resolve {target.address}"
-            )
+            return ProbeResult(code=PING_FAILED, message=f"cannot resolve {target.address}")
 
         ping_args = ping_command(osname, ip_version)
         if not ping_args:
-            return ProbeResult(
-                code=PING_FAILED, message=f"ping is not supported on {osname}"
-            )
+            return ProbeResult(code=PING_FAILED, message=f"ping is not supported on {osname}")
 
         cmd: list[str] = []
         relay = target.relay or {}
@@ -466,23 +458,17 @@ class ProbeRunner:
         if via == "netns":
             relay_name = relay.get("relay")
             if not relay_name:
-                return ProbeResult(
-                    code=PING_FAILED, message="netns relay is missing relay"
-                )
+                return ProbeResult(code=PING_FAILED, message="netns relay is missing relay")
             cmd += ["ip", "netns", "exec", str(relay_name)]
         elif via == "vrf":
             relay_name = relay.get("relay")
             if not relay_name:
-                return ProbeResult(
-                    code=PING_FAILED, message="vrf relay is missing relay"
-                )
+                return ProbeResult(code=PING_FAILED, message="vrf relay is missing relay")
             cmd += ["ip", "vrf", "exec", str(relay_name)]
         elif relay:
             relay_host = relay.get("relay")
             if not relay_host:
-                return ProbeResult(
-                    code=PING_FAILED, message="ssh relay is missing relay"
-                )
+                return ProbeResult(code=PING_FAILED, message="ssh relay is missing relay")
             cmd += [
                 "ssh",
                 "-o",
@@ -503,9 +489,7 @@ class ProbeRunner:
             elif osname == "Darwin":
                 cmd += ["-S", target.source]
             else:
-                return ProbeResult(
-                    code=PING_FAILED, message=f"source is not supported on {osname}"
-                )
+                return ProbeResult(code=PING_FAILED, message=f"source is not supported on {osname}")
 
         cmd.append(target.address)
         output, timed_out = await run_command(cmd, timeout=self.timeout)
@@ -522,9 +506,7 @@ class ProbeRunner:
             output, timed_out = await run_command(cmd, timeout=self.timeout)
             if timed_out:
                 return ProbeResult(code=PING_TIMEOUT, message="hping3 timed out")
-            rtt_match = re.search(
-                r"round-trip min/avg/max\s*=\s*(\d+(?:\.\d+)?)", output
-            )
+            rtt_match = re.search(r"round-trip min/avg/max\s*=\s*(\d+(?:\.\d+)?)", output)
             if rtt_match:
                 return ProbeResult(
                     success=True,
@@ -533,9 +515,7 @@ class ProbeRunner:
                     ttl=-1,
                     message="tcp hping3 success",
                 )
-            return ProbeResult(
-                code=PING_FAILED, message=first_line(output) or "hping3 failed"
-            )
+            return ProbeResult(code=PING_FAILED, message=first_line(output) or "hping3 failed")
 
         start = time.perf_counter()
         try:
@@ -563,9 +543,7 @@ class ProbeRunner:
         community = relay.get("community")
         relay_host = relay.get("relay")
         if not community:
-            return ProbeResult(
-                code=PING_FAILED, message="snmp relay is missing community"
-            )
+            return ProbeResult(code=PING_FAILED, message="snmp relay is missing community")
         if not relay_host:
             return ProbeResult(code=PING_FAILED, message="snmp relay is missing relay")
 
@@ -591,9 +569,7 @@ class ProbeRunner:
                 ttl=-1,
                 message="snmp ping success",
             )
-        return ProbeResult(
-            code=PING_FAILED, message=first_line(output) or "snmpping failed"
-        )
+        return ProbeResult(code=PING_FAILED, message=first_line(output) or "snmpping failed")
 
     async def _routeros_probe(self, target: TargetConfig) -> ProbeResult:
         return await asyncio.to_thread(self._routeros_probe_sync, target)
@@ -604,13 +580,9 @@ class ProbeRunner:
         password = relay.get("password")
         relay_host = relay.get("relay")
         if not username or not password:
-            return ProbeResult(
-                code=PING_FAILED, message="routeros_api requires username and password"
-            )
+            return ProbeResult(code=PING_FAILED, message="routeros_api requires username and password")
         if not relay_host:
-            return ProbeResult(
-                code=PING_FAILED, message="routeros_api relay is missing relay"
-            )
+            return ProbeResult(code=PING_FAILED, message="routeros_api relay is missing relay")
 
         method = relay.get("method", "https")
         verify = str(relay.get("verify", "true")).lower() == "true"
@@ -627,9 +599,7 @@ class ProbeRunner:
         context = None if verify else ssl._create_unverified_context()
 
         try:
-            with urllib.request.urlopen(
-                request, timeout=self.timeout, context=context
-            ) as response:
+            with urllib.request.urlopen(request, timeout=self.timeout, context=context) as response:
                 details = json.loads(response.read().decode("utf-8"))
         except (
             urllib.error.URLError,
@@ -640,20 +610,14 @@ class ProbeRunner:
             return ProbeResult(code=PING_FAILED, message=f"routeros_api failed: {exc}")
 
         if not details:
-            return ProbeResult(
-                code=PING_FAILED, message="routeros_api returned no ping details"
-            )
+            return ProbeResult(code=PING_FAILED, message="routeros_api returned no ping details")
 
         packet_loss = str(details[0].get("packet-loss", "100")).strip().rstrip("%")
         try:
             if int(packet_loss) > 0:
-                return ProbeResult(
-                    code=PING_FAILED, message=f"routeros_api packet loss {packet_loss}%"
-                )
+                return ProbeResult(code=PING_FAILED, message=f"routeros_api packet loss {packet_loss}%")
         except ValueError:
-            return ProbeResult(
-                code=PING_FAILED, message=f"routeros_api packet loss {packet_loss}"
-            )
+            return ProbeResult(code=PING_FAILED, message=f"routeros_api packet loss {packet_loss}")
 
         rtt_ms = routeros_duration_to_ms(str(details[0].get("min-rtt", "")))
         ttl = safe_int(details[0].get("ttl"), default=-1)
@@ -667,9 +631,7 @@ class ProbeRunner:
 
 
 class AlertManager:
-    def __init__(
-        self, config: AlertConfig, app_name: str, public_url: str | None
-    ) -> None:
+    def __init__(self, config: AlertConfig, app_name: str, public_url: str | None) -> None:
         self.config = config
         self.app_name = app_name
         self.public_url = public_url
@@ -678,19 +640,13 @@ class AlertManager:
         if not self.config.enabled:
             return []
 
-        enabled_channels = [
-            channel for channel in self.config.channels if channel.enabled
-        ]
+        enabled_channels = [channel for channel in self.config.channels if channel.enabled]
         if not enabled_channels:
             return []
 
-        return await asyncio.gather(
-            *[self._notify_channel(channel, transition) for channel in enabled_channels]
-        )
+        return await asyncio.gather(*[self._notify_channel(channel, transition) for channel in enabled_channels])
 
-    async def _notify_channel(
-        self, channel: AlertChannel, transition: AlertTransition
-    ) -> dict[str, Any]:
+    async def _notify_channel(self, channel: AlertChannel, transition: AlertTransition) -> dict[str, Any]:
         url = channel.resolved_url()
         if not url:
             return {
@@ -735,9 +691,7 @@ class AlertManager:
             f"{streak}; loss {transition.loss_rate:.1f}% over {transition.sent} probes."
         )
 
-    def _slack_payload(
-        self, channel: AlertChannel, transition: AlertTransition
-    ) -> dict[str, Any]:
+    def _slack_payload(self, channel: AlertChannel, transition: AlertTransition) -> dict[str, Any]:
         severity = alert_severity(transition)
         fields = [
             slack_field("Target", transition.target_name),
@@ -747,9 +701,7 @@ class AlertManager:
             slack_field("Status", f"{severity['slack_icon']} {severity['label']}"),
             slack_field("Failure streak", str(transition.consecutive_down)),
             slack_field("Recovery streak", str(transition.consecutive_up)),
-            slack_field(
-                "Loss", f"{transition.loss_rate:.1f}% over {transition.sent} probes"
-            ),
+            slack_field("Loss", f"{transition.loss_rate:.1f}% over {transition.sent} probes"),
             slack_field("Latest RTT", format_ms(transition.latest_rtt_ms)),
             slack_field("Average RTT", format_ms(transition.avg_rtt_ms)),
             slack_field("Alert threshold", f"{transition.threshold} failures"),
@@ -765,13 +717,9 @@ class AlertManager:
         if transition.note:
             fields.append(slack_field("Note", transition.note, short=False))
         if transition.info_url:
-            fields.append(
-                slack_field("Info", slack_link(transition.info_url, "Open info link"))
-            )
+            fields.append(slack_field("Info", slack_link(transition.info_url, "Open info link")))
         if self.public_url:
-            fields.append(
-                slack_field("Dashboard", slack_link(self.public_url, "Open Deadmon"))
-            )
+            fields.append(slack_field("Dashboard", slack_link(self.public_url, "Open Deadmon")))
 
         attachment = {
             "color": severity["slack_color"],
@@ -906,9 +854,7 @@ class MonitorService:
         async with self._lock:
             for target, result in zip(targets, results, strict=True):
                 if isinstance(result, Exception):
-                    result = ProbeResult(
-                        code=PING_FAILED, message=str(result), checked_at=now
-                    )
+                    result = ProbeResult(code=PING_FAILED, message=str(result), checked_at=now)
                 state = self.states[target.stable_id]
                 alert_config = effective_alert_config(target, self.config)
                 transition = state.consume(
@@ -947,9 +893,7 @@ class MonitorService:
             targets = []
             for target in self.config.targets:
                 target_snapshot = self.states[target.stable_id].snapshot()
-                target_snapshot["alerts"] = public_alert_config(
-                    effective_alert_config(target, self.config)
-                )
+                target_snapshot["alerts"] = public_alert_config(effective_alert_config(target, self.config))
                 targets.append(target_snapshot)
 
         target_by_id = {target["id"]: target for target in targets}
@@ -961,15 +905,9 @@ class MonitorService:
                     "id": group.group_id,
                     "name": group.name,
                     "description": group.description,
-                    "latency_warning_ms": clean_float(
-                        effective_group_latency_warning_ms(group, self.config)
-                    ),
-                    "latency_critical_ms": clean_float(
-                        effective_group_latency_critical_ms(group, self.config)
-                    ),
-                    "alerts": public_alert_config(
-                        effective_group_alert_config(group, self.config)
-                    ),
+                    "latency_warning_ms": clean_float(effective_group_latency_warning_ms(group, self.config)),
+                    "latency_critical_ms": clean_float(effective_group_latency_critical_ms(group, self.config)),
+                    "alerts": public_alert_config(effective_group_alert_config(group, self.config)),
                     **status_totals(group_targets),
                 }
             )
@@ -1039,9 +977,7 @@ class DeadmonASGI:
         elif method == "GET" and path == "/assets/app.css":
             await send_response(send, 200, APP_CSS, "text/css; charset=utf-8")
         elif method == "GET" and path == "/assets/app.js":
-            await send_response(
-                send, 200, APP_JS, "application/javascript; charset=utf-8"
-            )
+            await send_response(send, 200, APP_JS, "application/javascript; charset=utf-8")
         elif method == "GET" and path == "/api/state":
             await send_json(send, await self.monitor.snapshot())
         elif method == "GET" and path == "/api/health":
@@ -1185,9 +1121,7 @@ def normalize_config(raw: dict[str, Any], path: Path) -> DeadmonConfig:
             latency_critical_ms=optional_float(raw_group.get("latency_critical_ms")),
             alerts=normalize_group_alerts(raw_group, group_name),
         )
-        for raw_target in as_config_list(
-            raw_group.get("targets", []), f"group {group_name} targets"
-        ):
+        for raw_target in as_config_list(raw_group.get("targets", []), f"group {group_name} targets"):
             group.targets.append(normalize_target(raw_target, group))
         groups.append(group)
 
@@ -1239,15 +1173,9 @@ def normalize_authentication(
     password = raw_auth.get("password")
     password_env = raw_auth.get("password_env")
     if password_env and password:
-        raise ConfigError(
-            "authentication cannot specify both password and password_env"
-        )
-    if (username and not (password or password_env)) or (
-        (password or password_env) and not username
-    ):
-        raise ConfigError(
-            "authentication requires both username and password or password_env"
-        )
+        raise ConfigError("authentication cannot specify both password and password_env")
+    if (username and not (password or password_env)) or ((password or password_env) and not username):
+        raise ConfigError("authentication requires both username and password or password_env")
 
     return AuthenticationConfig(
         username=str(username),
@@ -1256,13 +1184,9 @@ def normalize_authentication(
     )
 
 
-def normalize_group_alerts(
-    raw_group: dict[str, Any], group_name: str
-) -> AlertOverride | None:
+def normalize_group_alerts(raw_group: dict[str, Any], group_name: str) -> AlertOverride | None:
     if "alerts" in raw_group:
-        return normalize_alert_override(
-            raw_group.get("alerts"), f"group {group_name} alerts"
-        )
+        return normalize_alert_override(raw_group.get("alerts"), f"group {group_name} alerts")
     return None
 
 
@@ -1289,14 +1213,10 @@ def normalize_alert_override(raw_alerts: Any, context: str) -> AlertOverride:
 
 def normalize_alert_channels(raw_channels: Any, context: str) -> list[AlertChannel]:
     channels = []
-    for index, raw_channel in enumerate(
-        as_config_list(raw_channels, f"{context} channels"), start=1
-    ):
+    for index, raw_channel in enumerate(as_config_list(raw_channels, f"{context} channels"), start=1):
         if not isinstance(raw_channel, dict):
             raise ConfigError(f"{context} channels must be objects")
-        validate_allowed_keys(
-            raw_channel, ALERT_CHANNEL_KEYS, f"{context} channel {index}"
-        )
+        validate_allowed_keys(raw_channel, ALERT_CHANNEL_KEYS, f"{context} channel {index}")
         kind = str(raw_channel.get("type") or "").lower()
         if kind not in {"slack", "webex"}:
             raise ConfigError(f"{context} channel {index} has unsupported type: {kind}")
@@ -1308,9 +1228,7 @@ def normalize_alert_channels(raw_channels: Any, context: str) -> list[AlertChann
                 webhook_url=optional_str(raw_channel.get("webhook_url")),
                 webhook_url_env=optional_str(raw_channel.get("webhook_url_env")),
                 destination_channel=optional_str(raw_channel.get("channel")),
-                icon_emoji=normalize_icon_emoji(
-                    optional_str(raw_channel.get("icon_emoji"))
-                ),
+                icon_emoji=normalize_icon_emoji(optional_str(raw_channel.get("icon_emoji"))),
                 timeout=as_float(raw_channel.get("timeout", 5.0)),
             )
         )
@@ -1391,9 +1309,7 @@ def target_alerts(raw_target: dict[str, Any]) -> bool | None:
     raise ConfigError("target alerts must be true or false")
 
 
-def validate_allowed_keys(
-    mapping: dict[str, Any], allowed: set[str], context: str
-) -> None:
+def validate_allowed_keys(mapping: dict[str, Any], allowed: set[str], context: str) -> None:
     unknown = sorted(str(key) for key in mapping if key not in allowed)
     if unknown:
         joined = ", ".join(unknown)
@@ -1488,9 +1404,7 @@ def parse_ping_output(output: str, timed_out: bool) -> ProbeResult:
     if "operation timed out" in lowered:
         return ProbeResult(code=PING_TIMEOUT, message="ssh timed out")
     if "ssh:" in lowered or "permission denied" in lowered:
-        return ProbeResult(
-            code=PING_SSH_FAILED, message=first_line(output) or "ssh relay failed"
-        )
+        return ProbeResult(code=PING_SSH_FAILED, message=first_line(output) or "ssh relay failed")
     return ProbeResult(code=PING_FAILED, message=first_line(output) or "ping failed")
 
 
@@ -1513,18 +1427,14 @@ def effective_latency_warning_ms(target: TargetConfig, config: DeadmonConfig) ->
 
 
 def effective_latency_critical_ms(target: TargetConfig, config: DeadmonConfig) -> float:
-    value = effective_group_latency_critical_ms(
-        group_for_target(target, config), config
-    )
+    value = effective_group_latency_critical_ms(group_for_target(target, config), config)
     if target.latency_critical_ms is not None:
         value = target.latency_critical_ms
     return max(0.0, value)
 
 
 def effective_alert_config(target: TargetConfig, config: DeadmonConfig) -> AlertConfig:
-    group_alerts = effective_group_alert_config(
-        group_for_target(target, config), config
-    )
+    group_alerts = effective_group_alert_config(group_for_target(target, config), config)
     return AlertConfig(
         enabled=group_alerts.enabled if target.alerts is None else target.alerts,
         threshold=group_alerts.threshold,
@@ -1533,9 +1443,7 @@ def effective_alert_config(target: TargetConfig, config: DeadmonConfig) -> Alert
     )
 
 
-def effective_group_alert_config(
-    group: GroupConfig | None, config: DeadmonConfig
-) -> AlertConfig:
+def effective_group_alert_config(group: GroupConfig | None, config: DeadmonConfig) -> AlertConfig:
     base = config.alerts
     if not group or not group.alerts:
         return base
@@ -1549,17 +1457,13 @@ def effective_group_alert_config(
     )
 
 
-def effective_group_latency_warning_ms(
-    group: GroupConfig | None, config: DeadmonConfig
-) -> float:
+def effective_group_latency_warning_ms(group: GroupConfig | None, config: DeadmonConfig) -> float:
     if group and group.latency_warning_ms is not None:
         return max(0.0, group.latency_warning_ms)
     return max(0.0, config.latency_warning_ms)
 
 
-def effective_group_latency_critical_ms(
-    group: GroupConfig | None, config: DeadmonConfig
-) -> float:
+def effective_group_latency_critical_ms(group: GroupConfig | None, config: DeadmonConfig) -> float:
     if group and group.latency_critical_ms is not None:
         return max(0.0, group.latency_critical_ms)
     return max(0.0, config.latency_critical_ms)
@@ -1572,9 +1476,7 @@ def group_for_target(target: TargetConfig, config: DeadmonConfig) -> GroupConfig
     return None
 
 
-def result_latency_state(
-    result: ProbeResult, warning_ms: float, critical_ms: float
-) -> str:
+def result_latency_state(result: ProbeResult, warning_ms: float, critical_ms: float) -> str:
     if not result.success:
         return "lost"
     if critical_ms > 0 and result.rtt_ms >= critical_ms:
@@ -1798,15 +1700,9 @@ def public_config(config: DeadmonConfig) -> dict[str, Any]:
                 "id": group.group_id,
                 "name": group.name,
                 "description": group.description,
-                "latency_warning_ms": clean_float(
-                    effective_group_latency_warning_ms(group, config)
-                ),
-                "latency_critical_ms": clean_float(
-                    effective_group_latency_critical_ms(group, config)
-                ),
-                "alerts": public_alert_config(
-                    effective_group_alert_config(group, config)
-                ),
+                "latency_warning_ms": clean_float(effective_group_latency_warning_ms(group, config)),
+                "latency_critical_ms": clean_float(effective_group_latency_critical_ms(group, config)),
+                "alerts": public_alert_config(effective_group_alert_config(group, config)),
                 "targets": [
                     {
                         "name": target.name,
@@ -1816,15 +1712,9 @@ def public_config(config: DeadmonConfig) -> dict[str, Any]:
                         "relay": public_relay(target.relay),
                         "source": target.source,
                         "tcp": public_tcp(target.tcp),
-                        "latency_warning_ms": clean_float(
-                            effective_latency_warning_ms(target, config)
-                        ),
-                        "latency_critical_ms": clean_float(
-                            effective_latency_critical_ms(target, config)
-                        ),
-                        "alerts": public_alert_config(
-                            effective_alert_config(target, config)
-                        ),
+                        "latency_warning_ms": clean_float(effective_latency_warning_ms(target, config)),
+                        "latency_critical_ms": clean_float(effective_latency_critical_ms(target, config)),
+                        "alerts": public_alert_config(effective_alert_config(target, config)),
                     }
                     for target in group.targets
                 ],

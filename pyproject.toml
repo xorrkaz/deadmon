@@ -11,7 +11,7 @@ build-backend = "hatchling.build"
 name = "deadmon"
 version = "1.2.1"
 description = "Web-native reachability monitor based on the original deadman work."
-authors = [{name = "Joe Clarke", email = "jclarke@marcuscom.com"}]
+authors = [{ name = "Joe Clarke", email = "jclarke@marcuscom.com" }]
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -24,7 +24,7 @@ Homepage = "https://github.com/xorrkaz/deadmon"
 Issues = "https://github.com/xorrkaz/deadmon/issues"
 
 [dependency-groups]
-dev = ["ruff>=0.8,<1",]
+dev = ["ruff>=0.8,<1"]
 
 [project.scripts]
 deadmon = "deadmon.cli:main"
