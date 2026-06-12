@@ -161,10 +161,22 @@ List recipes:
 just
 ```
 
-Install or update the local environment:
+Install the runtime environment:
 
 ```sh
-just sync
+just install
+```
+
+Install the development environment (adds dev tools such as `ruff`):
+
+```sh
+just dev-install
+```
+
+Upgrade all dependencies to their latest versions:
+
+```sh
+just update
 ```
 
 Validate Python files and config:
@@ -202,6 +214,12 @@ Load the Docker image locally:
 
 ```sh
 just docker-load
+```
+
+Build the Python package:
+
+```sh
+just build
 ```
 
 Stop the Docker Compose deployment:
@@ -244,7 +262,9 @@ The browser dashboard uses the same JSON endpoints operators can inspect:
 
 - `/api/health`: health status.
 - `/api/state`: current app, group, target, and alert state.
-- `/api/config`: sanitized loaded configuration.
+
+When `app.authentication` is configured, these endpoints also require the
+configured HTTP Basic credentials.
 
 Example:
 

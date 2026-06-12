@@ -41,8 +41,10 @@ APP_KEYS = {
     "latency_warning_ms",
     "latency_critical_ms",
     "retain_results",
+    "authentication",
 }
 ALERT_KEYS = {"enabled", "threshold", "clear_threshold", "channels"}
+AUTHENTICATION_KEYS = {"username", "password"}
 ALERT_CHANNEL_KEYS = {
     "name",
     "type",
@@ -160,6 +162,12 @@ class AlertConfig:
 
 
 @dataclass(slots=True)
+class AuthenticationConfig:
+    username: str
+    password: str
+
+
+@dataclass(slots=True)
 class AlertOverride:
     enabled: bool | None = None
     threshold: int | None = None
@@ -179,6 +187,7 @@ class DeadmonConfig:
     latency_warning_ms: float = 100.0
     latency_critical_ms: float = 250.0
     retain_results: int = 30
+    authentication: dict | None = None
     groups: list[GroupConfig] = field(default_factory=list)
     alerts: AlertConfig = field(default_factory=AlertConfig)
 
@@ -990,8 +999,18 @@ class DeadmonASGI:
         if scope["type"] != "http":
             await send_response(send, 404, "not found", "text/plain; charset=utf-8")
             return
-        
-        if 
+
+        if self.config.authentication:
+            headers = scope.get("headers", [])
+            auth_header = None
+            for header in headers:
+                if header[0].decode("utf-8").lower() == "authorization":
+                    auth_header = header[1].decode("utf-8")
+                    break
+
+            if not self._authenticate(auth_header):
+                await self._login(send)
+                return
 
         method = scope.get("method", "GET").upper()
         path = scope.get("path", "/")
@@ -1019,6 +1038,40 @@ class DeadmonASGI:
         #    await send_json(send, public_config(self.config))
         else:
             await send_response(send, 404, "not found", "text/plain; charset=utf-8")
+
+    def _authenticate(self, auth_header: str | None) -> bool:
+        from base64 import b64decode
+
+        if not auth_header:
+            return False
+
+        atype, creds = auth_header.split(None, 1)
+        if atype.lower() != "basic":
+            return False
+
+        decoded_creds = b64decode(creds).decode("utf-8")
+        username, password = decoded_creds.split(":", 1)
+        if (
+            username == self.config.authentication.username
+            and password == self.config.authentication.password
+        ):
+            return True
+
+        return False
+
+    async def _login(self, send: Any) -> None:
+        await send_response(
+            send,
+            401,
+            "Authentication Required",
+            "text/html; charset=utf-8",
+            additional_headers=[
+                (
+                    b"www-authenticate",
+                    b"Basic realm='" + self.config.name.encode("utf-8") + b" Login'",
+                )
+            ],
+        )
 
     async def _lifespan(self, receive: Any, send: Any) -> None:
         while True:
@@ -1088,7 +1141,10 @@ def normalize_config(raw: dict[str, Any], path: Path) -> DeadmonConfig:
     latency_warning_ms = as_float(app.get("latency_warning_ms", 100.0))
     latency_critical_ms = as_float(app.get("latency_critical_ms", 250.0))
     retain_results = as_int(app.get("retain_results", 30))
+    raw_authentication = app.get("authentication")
     alerts = normalize_alerts(raw.get("alerts", {}))
+
+    authentication = normalize_authentication(raw_authentication)
 
     raw_groups = raw.get("groups")
     if not raw_groups:
@@ -1130,6 +1186,7 @@ def normalize_config(raw: dict[str, Any], path: Path) -> DeadmonConfig:
         latency_warning_ms=max(0.0, latency_warning_ms),
         latency_critical_ms=max(0.0, latency_critical_ms),
         retain_results=max(5, min(120, retain_results)),
+        authentication=authentication,
         groups=groups,
         alerts=alerts,
     )
@@ -1147,6 +1204,26 @@ def normalize_alerts(raw_alerts: Any) -> AlertConfig:
         threshold=max(1, as_int(raw_alerts.get("threshold", 3))),
         clear_threshold=max(1, as_int(raw_alerts.get("clear_threshold", 2))),
         channels=normalize_alert_channels(raw_alerts.get("channels", []), "alert"),
+    )
+
+
+def normalize_authentication(
+    raw_auth: dict[str, str] | None,
+) -> AuthenticationConfig | None:
+    if not raw_auth:
+        return None
+    if not isinstance(raw_auth, dict):
+        raise ConfigError("authentication must be an object")
+    validate_allowed_keys(raw_auth, AUTHENTICATION_KEYS, "authentication")
+
+    username = raw_auth.get("username")
+    password = raw_auth.get("password")
+    if (username and not password) or (password and not username):
+        raise ConfigError("authentication requires both username and password")
+
+    return AuthenticationConfig(
+        username=str(username),
+        password=str(password),
     )
 
 
@@ -1521,12 +1598,22 @@ async def send_json(send: Any, payload: Any, status: int = 200) -> None:
     )
 
 
-async def send_response(send: Any, status: int, body: str, content_type: str) -> None:
+async def send_response(
+    send: Any,
+    status: int,
+    body: str,
+    content_type: str,
+    additional_headers: list | None = None,
+) -> None:
+    if not additional_headers:
+        additional_headers = []
+
     headers = [
         (b"content-type", content_type.encode("ascii")),
         (b"cache-control", b"no-store"),
         (b"x-content-type-options", b"nosniff"),
     ]
+    headers += additional_headers
     await send({"type": "http.response.start", "status": status, "headers": headers})
     await send({"type": "http.response.body", "body": body.encode("utf-8")})
 

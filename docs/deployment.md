@@ -181,6 +181,24 @@ An active notification is sent after `threshold` consecutive failed probes. A
 cleared notification is sent after `clear_threshold` consecutive successful
 probes.
 
+## Authentication
+
+Deadmon can require HTTP Basic authentication for the dashboard and all API
+endpoints. Enable it with the `app.authentication` block:
+
+```yaml
+app:
+  authentication:
+    username: admin
+    password: change-me
+```
+
+Both `username` and `password` are required when the block is present. Because
+Basic authentication sends credentials in a reversible, base64-encoded header,
+always pair built-in authentication with TLS terminated at the reverse proxy.
+You can alternatively skip `app.authentication` and enforce authentication and
+TLS entirely at the proxy layer.
+
 ## Reverse Proxy
 
 Deadmon assumes it will normally run behind a reverse proxy. The CLI enables
@@ -276,5 +294,6 @@ The endpoint returns HTTP 200 when the monitor loop is healthy. It returns HTTP
 - Run `just check` before deployment.
 - Store Slack and Webex webhook URLs in environment variables or a secret store.
 - Confirm the container has the capabilities required for your probe types.
-- Put authentication and TLS at the reverse proxy layer.
+- Enable `app.authentication` or enforce authentication at the reverse proxy,
+  and terminate TLS at the proxy layer.
 - Monitor `/api/health` from your platform or load balancer.

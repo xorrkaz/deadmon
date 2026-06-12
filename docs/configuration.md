@@ -20,6 +20,9 @@ app:
   latency_warning_ms: 100
   latency_critical_ms: 250
   retain_results: 30
+  authentication:
+    username: admin
+    password: change-me
 
 alerts:
   enabled: true
@@ -58,6 +61,8 @@ groups:
   critical latency. This is the global default. Set to `0` to disable the
   critical level.
 - `retain_results`: number of recent probe results kept per target.
+- `authentication`: optional HTTP Basic authentication for the dashboard and
+  API. See [Authentication](#authentication).
 
 Latency thresholds are resolved in this order:
 
@@ -229,6 +234,34 @@ groups:
 
 In this example, `mroot` uses the group thresholds, while `strict-host` uses its
 own stricter target thresholds.
+
+## Authentication
+
+The optional `app.authentication` block protects the dashboard and all API
+endpoints with HTTP Basic authentication:
+
+```yaml
+app:
+  authentication:
+    username: admin
+    password: change-me
+```
+
+- `username`: account presented in the browser login prompt.
+- `password`: matching password.
+
+Both fields are required when `authentication` is present; supplying only one
+fails config validation. When the block is omitted, Deadmon serves the
+dashboard and API without authentication.
+
+Credentials are matched on every request, so all routes (including
+`/api/state` and `/api/health`) require the configured credentials. The login
+realm uses the configured `app.name`.
+
+Basic authentication transmits credentials in a reversible, base64-encoded
+header, so always run Deadmon behind TLS (typically terminated at a reverse
+proxy) when authentication is enabled. The configured credentials are never
+included in the sanitized config output from `--dump-config`.
 
 ## Direct ICMP
 
