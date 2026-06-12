@@ -190,14 +190,23 @@ endpoints. Enable it with the `app.authentication` block:
 app:
   authentication:
     username: admin
-    password: change-me
+    password_env: DEADMON_AUTH_PASSWORD
 ```
 
-Both `username` and `password` are required when the block is present. Because
-Basic authentication sends credentials in a reversible, base64-encoded header,
-always pair built-in authentication with TLS terminated at the reverse proxy.
-You can alternatively skip `app.authentication` and enforce authentication and
-TLS entirely at the proxy layer.
+Use `password_env` to read the password from an environment variable (preferred
+for production), or set a literal `password` for local testing. A username is
+required along with exactly one of `password` or `password_env`. Provide the
+secret through your process environment or secret store:
+
+```sh
+export DEADMON_AUTH_PASSWORD="change-me"
+just docker-up
+```
+
+Because Basic authentication sends credentials in a reversible, base64-encoded
+header, always pair built-in authentication with TLS terminated at the reverse
+proxy. You can alternatively skip `app.authentication` and enforce
+authentication and TLS entirely at the proxy layer.
 
 ## Reverse Proxy
 

@@ -77,17 +77,19 @@ fires after `clear_threshold` consecutive successes. Groups can override alert
 thresholds and channels, and individual targets can suppress inherited alert
 delivery with `alerts: false`.
 
-Optionally protect the dashboard and API with HTTP Basic authentication:
+Optionally protect the dashboard and API with HTTP Basic authentication. Read
+the password from an environment variable to keep it out of the config file:
 
 ```yaml
 app:
   authentication:
     username: admin
-    password: change-me
+    password_env: DEADMON_AUTH_PASSWORD
 ```
 
-Run Deadmon behind TLS when authentication is enabled, since Basic auth sends
-credentials in a reversible, base64-encoded header.
+A literal `password` is also supported for local testing. Run Deadmon behind
+TLS when authentication is enabled, since Basic auth sends credentials in a
+reversible, base64-encoded header.
 
 See the [configuration reference](docs/configuration.md) for probe examples and
 field details.

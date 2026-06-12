@@ -44,7 +44,7 @@ APP_KEYS = {
     "authentication",
 }
 ALERT_KEYS = {"enabled", "threshold", "clear_threshold", "channels"}
-AUTHENTICATION_KEYS = {"username", "password"}
+AUTHENTICATION_KEYS = {"username", "password", "password_env"}
 ALERT_CHANNEL_KEYS = {
     "name",
     "type",
@@ -164,7 +164,8 @@ class AlertConfig:
 @dataclass(slots=True)
 class AuthenticationConfig:
     username: str
-    password: str
+    password: str | None = None
+    password_env: str | None = None
 
 
 @dataclass(slots=True)
@@ -1051,10 +1052,11 @@ class DeadmonASGI:
 
         decoded_creds = b64decode(creds).decode("utf-8")
         username, password = decoded_creds.split(":", 1)
-        if (
-            username == self.config.authentication.username
-            and password == self.config.authentication.password
-        ):
+        if self.config.authentication.password_env:
+            app_password = os.environ.get(self.config.authentication.password_env, "")
+        else:
+            app_password = self.config.authentication.password
+        if username == self.config.authentication.username and password == app_password:
             return True
 
         return False
@@ -1218,12 +1220,22 @@ def normalize_authentication(
 
     username = raw_auth.get("username")
     password = raw_auth.get("password")
-    if (username and not password) or (password and not username):
-        raise ConfigError("authentication requires both username and password")
+    password_env = raw_auth.get("password_env")
+    if password_env and password:
+        raise ConfigError(
+            "authentication cannot specify both password and password_env"
+        )
+    if (username and not (password or password_env)) or (
+        (password or password_env) and not username
+    ):
+        raise ConfigError(
+            "authentication requires both username and password or password_env"
+        )
 
     return AuthenticationConfig(
         username=str(username),
-        password=str(password),
+        password=str(password) if password else None,
+        password_env=str(password_env) if password_env else None,
     )
 
 

@@ -248,11 +248,31 @@ app:
 ```
 
 - `username`: account presented in the browser login prompt.
-- `password`: matching password.
+- `password`: matching password. Mutually exclusive with `password_env`.
+- `password_env`: name of an environment variable that holds the password.
+  Preferred over `password` so the secret stays out of the config file.
 
-Both fields are required when `authentication` is present; supplying only one
-fails config validation. When the block is omitted, Deadmon serves the
-dashboard and API without authentication.
+A username is always required, along with exactly one of `password` or
+`password_env`. Specifying both `password` and `password_env`, or supplying a
+username without a password, fails config validation. When the block is
+omitted, Deadmon serves the dashboard and API without authentication.
+
+Read the password from the environment instead of committing it:
+
+```yaml
+app:
+  authentication:
+    username: admin
+    password_env: DEADMON_AUTH_PASSWORD
+```
+
+```sh
+export DEADMON_AUTH_PASSWORD="change-me"
+just run
+```
+
+The `password_env` variable is resolved on every request, so rotating the
+secret takes effect after the process is restarted with the new value.
 
 Credentials are matched on every request, so all routes (including
 `/api/state` and `/api/health`) require the configured credentials. The login
