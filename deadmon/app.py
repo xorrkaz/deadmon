@@ -990,6 +990,8 @@ class DeadmonASGI:
         if scope["type"] != "http":
             await send_response(send, 404, "not found", "text/plain; charset=utf-8")
             return
+        
+        if 
 
         method = scope.get("method", "GET").upper()
         path = scope.get("path", "/")
@@ -1013,8 +1015,8 @@ class DeadmonASGI:
                 {"ok": status == 200, "last_error": snapshot["app"]["last_error"]},
                 status,
             )
-        elif method == "GET" and path == "/api/config":
-            await send_json(send, public_config(self.config))
+        # elif method == "GET" and path == "/api/config":
+        #    await send_json(send, public_config(self.config))
         else:
             await send_response(send, 404, "not found", "text/plain; charset=utf-8")
 
