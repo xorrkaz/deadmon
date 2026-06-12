@@ -19,11 +19,28 @@ import urllib.request
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from importlib import metadata
 from pathlib import Path
 from shutil import which
 from typing import Any
 
-APP_VERSION = "1.0.0"
+
+def _detect_version() -> str:
+    try:
+        return metadata.version("deadmon")
+    except metadata.PackageNotFoundError:
+        pass
+    import tomllib
+
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        return str(data["project"]["version"])
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        return "0.0.0"
+
+
+APP_VERSION = _detect_version()
 PING_SUCCESS = "success"
 PING_FAILED = "failed"
 PING_TIMEOUT = "timeout"
@@ -1910,14 +1927,14 @@ FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
 """
 
 
-INDEX_HTML = """<!doctype html>
+INDEX_HTML = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>deadmon</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="assets/app.css?v=1.0.0">
+  <link rel="stylesheet" href="assets/app.css?v={APP_VERSION}">
 </head>
 <body>
   <header class="topbar">
@@ -1933,7 +1950,7 @@ INDEX_HTML = """<!doctype html>
       </div>
       <div>
         <h1 id="app-name">deadmon</h1>
-        <p id="app-meta">1.0.0</p>
+        <p id="app-meta">{APP_VERSION}</p>
       </div>
     </div>
     <div class="pulse-line">
@@ -1966,7 +1983,7 @@ INDEX_HTML = """<!doctype html>
     </section>
     <section class="target-grid" id="target-grid" aria-live="polite"></section>
   </main>
-  <script src="assets/app.js?v=1.0.0"></script>
+  <script src="assets/app.js?v={APP_VERSION}"></script>
 </body>
 </html>
 """
