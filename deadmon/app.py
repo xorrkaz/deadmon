@@ -965,7 +965,18 @@ class DeadmonASGI:
                     break
 
             if not self._authenticate(auth_header):
-                await self._login(send)
+                await send_response(
+                    send,
+                    401,
+                    "Authentication Required",
+                    "text/html; charset=utf-8",
+                    additional_headers=[
+                        (
+                            b"www-authenticate",
+                            b"Basic realm='" + self.config.name.encode("utf-8") + b" Login'",
+                        )
+                    ],
+                )
                 return
 
         method = scope.get("method", "GET").upper()
@@ -1013,20 +1024,6 @@ class DeadmonASGI:
             return True
 
         return False
-
-    async def _login(self, send: Any) -> None:
-        await send_response(
-            send,
-            401,
-            "Authentication Required",
-            "text/html; charset=utf-8",
-            additional_headers=[
-                (
-                    b"www-authenticate",
-                    b"Basic realm='" + self.config.name.encode("utf-8") + b" Login'",
-                )
-            ],
-        )
 
     async def _lifespan(self, receive: Any, send: Any) -> None:
         while True:
