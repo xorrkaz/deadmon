@@ -1010,18 +1010,21 @@ class DeadmonASGI:
         if not auth_header:
             return False
 
-        atype, creds = auth_header.split(None, 1)
-        if atype.lower() != "basic":
-            return False
+        try:
+            atype, creds = auth_header.split(None, 1)
+            if atype.lower() != "basic":
+                return False
 
-        decoded_creds = b64decode(creds).decode("utf-8")
-        username, password = decoded_creds.split(":", 1)
-        if self.config.authentication.password_env:
-            app_password = os.environ.get(self.config.authentication.password_env, "")
-        else:
-            app_password = self.config.authentication.password
-        if username == self.config.authentication.username and password == app_password:
-            return True
+            decoded_creds = b64decode(creds).decode("utf-8")
+            username, password = decoded_creds.split(":", 1)
+            if self.config.authentication.password_env:
+                app_password = os.environ.get(self.config.authentication.password_env, "")
+            else:
+                app_password = self.config.authentication.password
+            if username == self.config.authentication.username and password == app_password:
+                return True
+        except Exception:
+            return False
 
         return False
 
