@@ -64,10 +64,11 @@ Status meanings:
 - `down`: the target crossed the active alert threshold and is currently failing.
 - `pending`: the target has not completed its first probe.
 
-Rows are sorted dynamically so the most operationally relevant targets rise to
-the top: active down targets, current lost probes, critical latency, warning
-latency, recovering degraded targets, targets with recent failures, pending
-targets, then clean targets in configured order.
+Rows are sorted by severity bucket so operationally relevant targets rise to the
+top without constant churn: active down targets, current lost probes, critical
+latency, warning latency, recovering degraded targets, pending targets, then
+clean targets. Targets keep their configured order inside each bucket, so normal
+latency variation does not reshuffle the dashboard.
 
 Configure global latency thresholds in `app`, override them per group when a
 set of targets has a different baseline, and override them again per target

@@ -2181,7 +2181,7 @@ h2 {
 
 .target-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 760px), 1fr));
   gap: 0 28px;
 }
 
@@ -2189,10 +2189,16 @@ h2 {
   display: grid;
   grid-template-columns: 12px minmax(120px, 0.9fr) minmax(120px, 1fr) minmax(120px, 0.9fr) minmax(170px, 1.2fr) 78px 70px;
   align-items: center;
+  min-width: 0;
   min-height: 28px;
   gap: 8px;
   border-bottom: 1px solid var(--line-soft);
   color: var(--text);
+  overflow: hidden;
+}
+
+.target-row > * {
+  min-width: 0;
 }
 
 .target-row.is-down {
@@ -2284,6 +2290,7 @@ h2 {
   width: 100%;
   height: 22px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .pip {
@@ -2365,6 +2372,9 @@ h2 {
 
 .metric {
   justify-self: end;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -2716,30 +2726,18 @@ function compareTargets(left, right) {
   const rightWeight = targetSortWeight(right);
   if (leftWeight !== rightWeight) return leftWeight - rightWeight;
 
-  if (Number(right.alert_active) !== Number(left.alert_active)) {
-    return Number(right.alert_active) - Number(left.alert_active);
-  }
-  if (right.consecutive_down !== left.consecutive_down) {
-    return right.consecutive_down - left.consecutive_down;
-  }
-
-  const failureDelta = recentFailureCount(right) - recentFailureCount(left);
-  if (failureDelta !== 0) return failureDelta;
-
-  if (right.loss_rate !== left.loss_rate) return right.loss_rate - left.loss_rate;
-  if (right.latest_rtt_ms !== left.latest_rtt_ms) return right.latest_rtt_ms - left.latest_rtt_ms;
+  // Preserve configured order inside each severity bucket so normal RTT updates do not churn rows.
   return left.config_index - right.config_index;
 }
 
 function targetSortWeight(target) {
   if (target.status === "down") return 0;
-  if (target.up === false) return 1;
+  if (target.up === false || target.latency_state === "lost") return 1;
   if (target.latency_state === "critical") return 2;
   if (target.latency_state === "warn") return 3;
   if (target.status === "degraded") return 4;
-  if (recentFailureCount(target) > 0) return 5;
-  if (target.status === "pending") return 6;
-  return 7;
+  if (target.status === "pending") return 5;
+  return 6;
 }
 
 function recentFailureCount(target) {
