@@ -1411,7 +1411,7 @@ def parse_snmpping_output(output: str, timed_out: bool) -> ProbeResult:
         )
 
     lowered = output.lower()
-    if "timed out" in lowered or "0 packets received" in lowered or "0 responses" in lowered:
+    if "timed out" in lowered or "0 packets received" in lowered or re.search(r"\b0\s+received\b", lowered) or "0 responses" in lowered:
         return ProbeResult(code=PING_TIMEOUT, message=first_line(output) or "snmpping timed out")
     return ProbeResult(code=PING_FAILED, message=first_line(output) or "snmpping failed")
 

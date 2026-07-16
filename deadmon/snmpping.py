@@ -159,15 +159,16 @@ def remote_ping(relay: str, community: str, target: str, timeout: float, count: 
     result_sent = PING_RESULTS_SENT_PROBES + index
 
     try:
-        client.set(
+        create_ping_row(
+            client,
             [
                 (ctl_target_type, SnmpValue(SNMP_INTEGER, address_type)),
                 (ctl_target_address, SnmpValue(SNMP_OCTET_STRING, address_value)),
                 (ctl_timeout, SnmpValue(SNMP_UNSIGNED32, timeout_seconds)),
                 (ctl_probe_count, SnmpValue(SNMP_UNSIGNED32, probe_count)),
-                (ctl_admin_status, SnmpValue(SNMP_INTEGER, 1)),
-                (ctl_row_status, SnmpValue(SNMP_INTEGER, 4)),
-            ]
+            ],
+            ctl_admin_status,
+            ctl_row_status,
         )
 
         values: dict[OID, Any] = {}
@@ -181,7 +182,9 @@ def remote_ping(relay: str, community: str, target: str, timeout: float, count: 
                 raise
 
             status = int(values.get(result_status, 0) or 0)
-            if status in {2, 3}:
+            sent = int(values.get(result_sent, 0) or 0)
+            responses = int(values.get(result_responses, 0) or 0)
+            if ping_result_is_final(status=status, sent=sent, responses=responses, probe_count=probe_count):
                 break
             time.sleep(0.1)
 
@@ -197,6 +200,35 @@ def remote_ping(relay: str, community: str, target: str, timeout: float, count: 
             client.set([(ctl_row_status, SnmpValue(SNMP_INTEGER, 6))])
         except (OSError, SnmpError, SnmpTimeout):
             pass
+
+
+def create_ping_row(client: SnmpV2Client, columns: list[tuple[OID, SnmpValue]], admin_status_oid: OID, row_status_oid: OID) -> None:
+    try:
+        client.set([*columns, (row_status_oid, SnmpValue(SNMP_INTEGER, 5))])
+        client.set([(row_status_oid, SnmpValue(SNMP_INTEGER, 1))])
+        client.set([(admin_status_oid, SnmpValue(SNMP_INTEGER, 1))])
+    except SnmpError:
+        try:
+            client.set([(row_status_oid, SnmpValue(SNMP_INTEGER, 6))])
+        except (OSError, SnmpError, SnmpTimeout):
+            pass
+        client.set(
+            [
+                *columns,
+                (admin_status_oid, SnmpValue(SNMP_INTEGER, 1)),
+                (row_status_oid, SnmpValue(SNMP_INTEGER, 4)),
+            ]
+        )
+
+
+def ping_result_is_final(status: int, sent: int, responses: int, probe_count: int) -> bool:
+    if status == 3:
+        return True
+    if responses > 0 and sent >= responses:
+        return True
+    if status == 2 and sent >= probe_count:
+        return True
+    return False
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -237,8 +269,10 @@ def print_ping_result(relay: str, target: str, result: PingResult) -> None:
     sent = result.sent or 0
     responses = result.responses or 0
     loss = 0.0 if sent <= 0 else max(0.0, min(100.0, (sent - responses) / sent * 100.0))
-    print(f"SNMP PING {target} from {relay}")
-    print(f"{sent} packets transmitted, {responses} packets received, {loss:.0f}% packet loss")
+    received_word = "received" if responses == 1 else "received"
+    print(f"PING {target} ({target}) from {relay} with 0 bytes of extra data")
+    print(f"--- {target} ping statistics ---")
+    print(f"{sent} packets transmitted, {responses} {received_word}, {loss:.0f}% packet loss")
     if responses > 0:
         min_rtt = result.min_rtt_ms or result.avg_rtt_ms
         max_rtt = result.max_rtt_ms or result.avg_rtt_ms

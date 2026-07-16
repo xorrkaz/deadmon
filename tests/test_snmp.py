@@ -3,7 +3,9 @@
 # Copyright (c) 2026 Joe Clarke <jclarke@marcuscom.com>
 # Based on the original deadman work by upa@haeena.net.
 
+import io
 import sys
+from contextlib import redirect_stdout
 from unittest import TestCase
 
 from deadmon.app import PING_SUCCESS, PING_TIMEOUT, parse_snmpping_output, snmpping_command
@@ -12,10 +14,14 @@ from deadmon.snmpping import (
     SNMP_GET_RESPONSE,
     SNMP_INTEGER,
     SNMP_UNSIGNED32,
+    PingResult,
     SnmpValue,
     control_probe_count,
     decode_snmp_response,
     encode_snmp_message,
+    parse_args,
+    ping_result_is_final,
+    print_ping_result,
     snmp_inet_address,
     snmp_table_index,
 )
@@ -88,12 +94,36 @@ class SnmpEncodingTests(TestCase):
         self.assertEqual(control_probe_count(["c3"]), 3)
         self.assertEqual(control_probe_count(["q", "c4"]), 4)
 
+    def test_net_snmp_attached_version_argument_is_parsed(self):
+        args = parse_args(["-Cc1", "-v2c", "-c", "rw", "192.0.2.254", "192.0.2.1"])
+
+        self.assertEqual(args.version, "2c")
+        self.assertEqual(args.count, 1)
+        self.assertEqual(args.community, "rw")
+
+    def test_print_ping_result_matches_native_shape(self):
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            print_ping_result("192.0.2.254", "192.0.2.1", PingResult(sent=1, responses=1, min_rtt_ms=2, avg_rtt_ms=2, max_rtt_ms=2))
+
+        self.assertEqual(
+            output.getvalue().splitlines(),
+            [
+                "PING 192.0.2.1 (192.0.2.1) from 192.0.2.254 with 0 bytes of extra data",
+                "--- 192.0.2.1 ping statistics ---",
+                "1 packets transmitted, 1 received, 0% packet loss",
+                "rtt min/avg/max/stddev = 2.000/2.000/2.000/0.000 ms",
+            ],
+        )
+
     def test_deadmon_snmpping_output_is_parsed(self):
         result = parse_snmpping_output(
             "\n".join(
                 [
-                    "SNMP PING 192.0.2.1 from 192.0.2.254",
-                    "1 packets transmitted, 1 packets received, 0% packet loss",
+                    "PING 192.0.2.1 (192.0.2.1) from 192.0.2.254 with 0 bytes of extra data",
+                    "--- 192.0.2.1 ping statistics ---",
+                    "1 packets transmitted, 1 received, 0% packet loss",
                     "rtt min/avg/max/stddev = 10.000/12.500/15.000/0.000 ms",
                 ]
             ),
@@ -105,7 +135,7 @@ class SnmpEncodingTests(TestCase):
 
     def test_snmpping_output_without_responses_is_timeout(self):
         result = parse_snmpping_output(
-            "1 packets transmitted, 0 packets received, 100% packet loss",
+            "1 packets transmitted, 0 received, 100% packet loss",
             timed_out=False,
         )
 
@@ -115,3 +145,9 @@ class SnmpEncodingTests(TestCase):
         self.assertEqual(snmpping_command({}), [sys.executable, "-m", "deadmon.snmpping"])
         self.assertEqual(snmpping_command({"snmpping": "system"}), ["snmpping"])
         self.assertEqual(snmpping_command({"snmpping": "/usr/local/bin/snmpping"}), ["/usr/local/bin/snmpping"])
+
+    def test_ping_result_does_not_finish_before_probes_are_sent(self):
+        self.assertFalse(ping_result_is_final(status=2, sent=0, responses=0, probe_count=1))
+        self.assertTrue(ping_result_is_final(status=2, sent=1, responses=0, probe_count=1))
+        self.assertTrue(ping_result_is_final(status=3, sent=0, responses=0, probe_count=1))
+        self.assertTrue(ping_result_is_final(status=1, sent=1, responses=1, probe_count=1))
