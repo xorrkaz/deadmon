@@ -12,17 +12,20 @@ operation, and the host permissions required by the supported probe types.
 - Network utilities for the probe types you enable:
   - `ping` or `ping6` for ICMP.
   - `ssh` for SSH relay probes.
-  - `snmpping` for SNMP relay probes.
   - `ip` for Linux netns and VRF probes.
   - `hping3` only if a TCP target is configured with `method: hping3`.
 
 The Docker image installs the common system tools used by the app: `ping`,
-`hping3`, `iproute2`, `openssh-client`, and `snmp`.
+`hping3`, `iproute2`, and `openssh-client`.
 
 The published Docker Hub image is available as `xorrkaz/deadmon`.
 
-SNMP relay probes execute `snmpping`. If your base image or host package set
-does not provide that binary, install it before enabling SNMP targets.
+SNMP relay probes execute a `snmpping`-compatible command. By default, Deadmon
+uses its bundled Python implementation, so the Docker image does not install
+Net-SNMP. Outside Docker, set `relay.snmpping: system` to use a working
+Net-SNMP `snmpping` from `PATH`, or set `relay.snmpping` to an explicit command
+path. RFC4560 remote ping requires the remote SNMP agent to support writable
+DISMAN-PING-MIB objects.
 
 ## Local Deployment
 

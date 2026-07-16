@@ -35,7 +35,7 @@ packages = ["deadmon"]
 [tool.ruff]
 line-length = 140
 target-version = "py311"
-extend-include = ["bin/deadmon", "bin/deadmon-convert-config"]
+extend-include = ["bin/deadmon", "bin/deadmon-convert-config", "bin/snmpping"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

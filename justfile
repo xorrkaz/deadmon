@@ -5,7 +5,7 @@
 
 set dotenv-load
 set shell := ['bash', '-c']
-python_files := "deadmon/*.py bin/deadmon bin/deadmon-convert-config tests/*.py"
+python_files := "deadmon/*.py bin/deadmon bin/deadmon-convert-config bin/snmpping tests/*.py"
 
 @_:
     just --list

@@ -13,6 +13,7 @@ import platform
 import re
 import socket
 import ssl
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -45,6 +46,7 @@ PING_SUCCESS = "success"
 PING_FAILED = "failed"
 PING_TIMEOUT = "timeout"
 PING_SSH_FAILED = "ssh_failed"
+DEFAULT_SNMPPING = "bundled"
 
 SECRET_KEYS = {"password", "community", "key", "webhook_url"}
 TOP_LEVEL_KEYS = {"app", "alerts", "groups"}
@@ -104,6 +106,7 @@ RELAY_CONFIG_KEYS = {
     "username",
     "password",
     "method",
+    "snmpping",
     "verify",
 }
 TCP_KEYS = {"dstport", "method"}
@@ -547,29 +550,21 @@ class ProbeRunner:
         if not relay_host:
             return ProbeResult(code=PING_FAILED, message="snmp relay is missing relay")
 
+        timeout_seconds = max(1, int(self.timeout + 0.999))
         cmd = [
-            "snmpping",
+            *snmpping_command(relay),
             "-Cc1",
             "-v",
             "2c",
             "-c",
             str(community),
+            "-t",
+            str(timeout_seconds),
             str(relay_host),
             target.address,
         ]
-        output, timed_out = await run_command(cmd, timeout=self.timeout)
-        if timed_out:
-            return ProbeResult(code=PING_TIMEOUT, message="snmpping timed out")
-        rtt_match = re.search(r"rtt min/avg/max/stddev\s*=\s*(\d+(?:\.\d+)?)", output)
-        if rtt_match:
-            return ProbeResult(
-                success=True,
-                code=PING_SUCCESS,
-                rtt_ms=float(rtt_match.group(1)),
-                ttl=-1,
-                message="snmp ping success",
-            )
-        return ProbeResult(code=PING_FAILED, message=first_line(output) or "snmpping failed")
+        output, timed_out = await run_command(cmd, timeout=timeout_seconds + 2.0)
+        return parse_snmpping_output(output, timed_out=timed_out)
 
     async def _routeros_probe(self, target: TargetConfig) -> ProbeResult:
         return await asyncio.to_thread(self._routeros_probe_sync, target)
@@ -1297,6 +1292,8 @@ def normalize_relay(value: Any, context: str) -> dict[str, Any]:
         "vrf",
     }:
         raise ConfigError(f"{context} via must be snmp, routeros_api, netns, or vrf")
+    if "snmpping" in value and not str(value["snmpping"]).strip():
+        raise ConfigError(f"{context} snmpping must be bundled, system, or a command path")
     return dict(value)
 
 
@@ -1349,6 +1346,15 @@ def ping_command(osname: str, ip_version: int) -> list[str] | None:
     return None
 
 
+def snmpping_command(relay: dict[str, Any]) -> list[str]:
+    tool = str(relay.get("snmpping") or DEFAULT_SNMPPING).strip()
+    if not tool or tool == DEFAULT_SNMPPING:
+        return [sys.executable, "-m", "deadmon.snmpping"]
+    if tool == "system":
+        return ["snmpping"]
+    return [tool]
+
+
 async def run_command(cmd: list[str], timeout: float) -> tuple[str, bool]:
     env = dict(os.environ)
     env["LC_ALL"] = "C"
@@ -1383,6 +1389,31 @@ async def run_command(cmd: list[str], timeout: float) -> tuple[str, bool]:
     output = stdout.decode("utf-8", errors="replace")
     error = stderr.decode("utf-8", errors="replace")
     return "\n".join(part for part in (output, error) if part), timed_out
+
+
+def parse_snmpping_output(output: str, timed_out: bool) -> ProbeResult:
+    if timed_out:
+        return ProbeResult(code=PING_TIMEOUT, message="snmpping timed out")
+
+    rtt_match = re.search(
+        r"rtt\s+min/avg/max(?:/(?:stddev|mdev))?\s*=\s*"
+        r"(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)",
+        output,
+        flags=re.IGNORECASE,
+    )
+    if rtt_match:
+        return ProbeResult(
+            success=True,
+            code=PING_SUCCESS,
+            rtt_ms=float(rtt_match.group(2)),
+            ttl=-1,
+            message="snmp ping success",
+        )
+
+    lowered = output.lower()
+    if "timed out" in lowered or "0 packets received" in lowered or "0 responses" in lowered:
+        return ProbeResult(code=PING_TIMEOUT, message=first_line(output) or "snmpping timed out")
+    return ProbeResult(code=PING_FAILED, message=first_line(output) or "snmpping failed")
 
 
 def parse_ping_output(output: str, timed_out: bool) -> ProbeResult:

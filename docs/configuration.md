@@ -325,10 +325,18 @@ used on the relay host.
   relay:
     relay: X.X.X.X
     via: snmp
-    community: public
+    community: change-me-rw
+    snmpping: bundled
 ```
 
-This uses `snmpping` and SNMPv2. See RFC4560 for the underlying mechanism.
+SNMP relay probes execute a `snmpping`-compatible command. The default is
+`snmpping: bundled`, which runs Deadmon's Python implementation of SNMPv2c
+RFC4560 REMOPS ping without requiring Net-SNMP. Set `snmpping: system` to use
+the Net-SNMP `snmpping` found in `PATH`, or set `snmpping` to an explicit command
+path.
+
+For RFC4560 remote ping, the configured community must be able to create, start,
+read, and delete `DISMAN-PING-MIB::pingCtlTable` rows on the relay device.
 
 ## Linux Network Namespace
 

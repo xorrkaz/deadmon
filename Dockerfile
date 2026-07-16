@@ -24,7 +24,6 @@ RUN apt-get update \
         iproute2 \
         iputils-ping \
         openssh-client \
-        snmp \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock ./
@@ -33,7 +32,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY deadmon ./deadmon
 COPY bin ./bin
 COPY README.md LICENSE ./
-RUN chmod +x /app/bin/deadmon /app/bin/deadmon-convert-config
+RUN chmod +x /app/bin/deadmon /app/bin/deadmon-convert-config /app/bin/snmpping
 RUN uv sync --frozen --no-dev
 EXPOSE 8000
 
