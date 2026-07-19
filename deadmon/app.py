@@ -625,7 +625,7 @@ class ProbeRunner:
         packet_loss = str(details[0].get("packet-loss", "100")).strip().rstrip("%")
         try:
             if int(packet_loss) > 0:
-                return ProbeResult(code=PING_FAILED, message=f"routeros_api packet loss {packet_loss}%")
+                return ProbeResult(code=PING_TIMEOUT, message=f"routeros_api packet loss {packet_loss}%")
         except ValueError:
             return ProbeResult(code=PING_FAILED, message=f"routeros_api packet loss {packet_loss}")
 
