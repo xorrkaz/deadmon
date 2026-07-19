@@ -263,14 +263,18 @@ The browser dashboard uses the same JSON endpoints operators can inspect:
 
 - `/api/health`: health status.
 - `/api/state`: current app, group, target, and alert state.
+- `POST /api/reload`: re-read the config without restarting the process.
 
 When `app.authentication` is configured, these endpoints also require the
 configured HTTP Basic credentials.
+
+Reloading a bad config is fatal: Deadmon logs the config error and exits.
 
 Example:
 
 ```sh
 curl -sS http://127.0.0.1:8000/api/state
+curl -fsS -X POST http://127.0.0.1:8000/api/reload
 ```
 
 ## Troubleshooting

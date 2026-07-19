@@ -11,6 +11,7 @@ import json
 import os
 import platform
 import re
+import signal
 import socket
 import ssl
 import sys
@@ -23,7 +24,7 @@ from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 from shutil import which
-from typing import Any
+from typing import Any, NoReturn
 
 
 def _detect_version() -> str:
@@ -275,6 +276,20 @@ class TargetState:
         self.last_message = "waiting for first probe"
         self.last_code = "pending"
         self.latest_latency_state = "pending"
+
+    def reconfigure(
+        self,
+        target: TargetConfig,
+        retain_results: int,
+        latency_warning_ms: float,
+        latency_critical_ms: float,
+    ) -> None:
+        self.target = target
+        self.latency_warning_ms = latency_warning_ms
+        self.latency_critical_ms = latency_critical_ms
+        if retain_results != self.retain_results:
+            self.history = deque(self.history, maxlen=retain_results)
+            self.retain_results = retain_results
 
     @property
     def loss_rate(self) -> float:
@@ -786,19 +801,13 @@ class MonitorService:
     def __init__(self, config: DeadmonConfig) -> None:
         self.config = config
         self.runner = ProbeRunner(timeout=config.timeout)
-        self.states = {
-            target.stable_id: TargetState(
-                target,
-                retain_results=config.retain_results,
-                latency_warning_ms=effective_latency_warning_ms(target, config),
-                latency_critical_ms=effective_latency_critical_ms(target, config),
-            )
-            for target in config.targets
-        }
+        self.states = {target.stable_id: new_target_state(target, config) for target in config.targets}
         self.started_at = datetime.now(UTC)
         self.last_tick_at: datetime | None = None
         self.last_tick_duration_ms = 0.0
         self.last_error: str | None = None
+        self.last_reload_at: datetime | None = None
+        self.reload_count = 0
         self.alert_log: deque[dict[str, Any]] = deque(maxlen=50)
         self._lock = asyncio.Lock()
         self._stop = asyncio.Event()
@@ -837,26 +846,35 @@ class MonitorService:
                 continue
 
     async def tick(self) -> None:
-        targets = self.config.targets
+        async with self._lock:
+            config = self.config
+            runner = self.runner
+            targets = list(config.targets)
+
         started = time.perf_counter()
         results = await asyncio.gather(
-            *[self.runner.probe(target) for target in targets],
+            *[runner.probe(target) for target in targets],
             return_exceptions=True,
         )
         transitions: list[tuple[AlertTransition, AlertConfig]] = []
         now = datetime.now(UTC)
 
         async with self._lock:
+            active_config = self.config
+            active_targets = {target.stable_id: target for target in active_config.targets}
             for target, result in zip(targets, results, strict=True):
+                target = active_targets.get(target.stable_id)
+                if target is None:
+                    continue
                 if isinstance(result, Exception):
                     result = ProbeResult(code=PING_FAILED, message=str(result), checked_at=now)
                 state = self.states[target.stable_id]
-                alert_config = effective_alert_config(target, self.config)
+                alert_config = effective_alert_config(target, active_config)
                 transition = state.consume(
                     result,
                     alert_threshold=alert_config.threshold,
                     clear_threshold=alert_config.clear_threshold,
-                    rtt_scale_ms=self.config.rtt_scale_ms,
+                    rtt_scale_ms=active_config.rtt_scale_ms,
                 )
                 if transition:
                     transitions.append((transition, alert_config))
@@ -883,64 +901,109 @@ class MonitorService:
                     }
                 )
 
+    async def reload_config(self, new_config: DeadmonConfig) -> dict[str, Any]:
+        async with self._lock:
+            old_state_count = len(self.states)
+            old_ids = set(self.states)
+            new_states: dict[str, TargetState] = {}
+            preserved = 0
+
+            for target in new_config.targets:
+                state = self.states.get(target.stable_id)
+                if state:
+                    preserved += 1
+                    state.reconfigure(
+                        target,
+                        retain_results=new_config.retain_results,
+                        latency_warning_ms=effective_latency_warning_ms(target, new_config),
+                        latency_critical_ms=effective_latency_critical_ms(target, new_config),
+                    )
+                else:
+                    state = new_target_state(target, new_config)
+                new_states[target.stable_id] = state
+
+            self.config = new_config
+            self.runner = ProbeRunner(timeout=new_config.timeout)
+            self.states = new_states
+            self.reload_count += 1
+            self.last_reload_at = datetime.now(UTC)
+
+            new_ids = set(new_states)
+            return {
+                "ok": True,
+                "message": "config reloaded",
+                "config_path": str(new_config.path),
+                "targets": len(new_states),
+                "groups": len(new_config.groups),
+                "preserved_targets": preserved,
+                "added_targets": len(new_ids - old_ids),
+                "removed_targets": old_state_count - preserved,
+                "reloaded_at": isoformat(self.last_reload_at),
+            }
+
     async def snapshot(self) -> dict[str, Any]:
         async with self._lock:
+            config = self.config
             targets = []
-            for target in self.config.targets:
+            for target in config.targets:
                 target_snapshot = self.states[target.stable_id].snapshot()
-                target_snapshot["alerts"] = public_alert_config(effective_alert_config(target, self.config))
+                target_snapshot["alerts"] = public_alert_config(effective_alert_config(target, config))
                 targets.append(target_snapshot)
 
-        target_by_id = {target["id"]: target for target in targets}
-        group_snapshots: list[dict[str, Any]] = []
-        for group in self.config.groups:
-            group_targets = [target_by_id[target.stable_id] for target in group.targets]
-            group_snapshots.append(
-                {
-                    "id": group.group_id,
-                    "name": group.name,
-                    "description": group.description,
-                    "latency_warning_ms": clean_float(effective_group_latency_warning_ms(group, self.config)),
-                    "latency_critical_ms": clean_float(effective_group_latency_critical_ms(group, self.config)),
-                    "alerts": public_alert_config(effective_group_alert_config(group, self.config)),
-                    **status_totals(group_targets),
-                }
-            )
+            target_by_id = {target["id"]: target for target in targets}
+            group_snapshots: list[dict[str, Any]] = []
+            for group in config.groups:
+                group_targets = [target_by_id[target.stable_id] for target in group.targets]
+                group_snapshots.append(
+                    {
+                        "id": group.group_id,
+                        "name": group.name,
+                        "description": group.description,
+                        "latency_warning_ms": clean_float(effective_group_latency_warning_ms(group, config)),
+                        "latency_critical_ms": clean_float(effective_group_latency_critical_ms(group, config)),
+                        "alerts": public_alert_config(effective_group_alert_config(group, config)),
+                        **status_totals(group_targets),
+                    }
+                )
 
-        totals = status_totals(targets)
-        return {
-            "app": {
-                "name": self.config.name,
-                "version": APP_VERSION,
-                "config_path": str(self.config.path),
-                "public_url": self.config.public_url,
-                "poll_interval": self.config.poll_interval,
-                "tab_rotation_interval": self.config.tab_rotation_interval,
-                "timeout": self.config.timeout,
-                "rtt_scale_ms": self.config.rtt_scale_ms,
-                "latency_warning_ms": clean_float(self.config.latency_warning_ms),
-                "latency_critical_ms": clean_float(self.config.latency_critical_ms),
-                "retain_results": self.config.retain_results,
-                "started_at": isoformat(self.started_at),
-                "last_tick_at": isoformat(self.last_tick_at),
-                "last_tick_duration_ms": round(self.last_tick_duration_ms, 2),
-                "server_time": isoformat(datetime.now(UTC)),
-                "last_error": self.last_error,
-            },
-            "totals": totals,
-            "groups": group_snapshots,
-            "targets": targets,
-            "alerts": {
-                **public_alert_config(self.config.alerts),
-                "recent": list(self.alert_log),
-            },
-        }
+            totals = status_totals(targets)
+            return {
+                "app": {
+                    "name": config.name,
+                    "version": APP_VERSION,
+                    "config_path": str(config.path),
+                    "public_url": config.public_url,
+                    "poll_interval": config.poll_interval,
+                    "tab_rotation_interval": config.tab_rotation_interval,
+                    "timeout": config.timeout,
+                    "rtt_scale_ms": config.rtt_scale_ms,
+                    "latency_warning_ms": clean_float(config.latency_warning_ms),
+                    "latency_critical_ms": clean_float(config.latency_critical_ms),
+                    "retain_results": config.retain_results,
+                    "started_at": isoformat(self.started_at),
+                    "last_tick_at": isoformat(self.last_tick_at),
+                    "last_tick_duration_ms": round(self.last_tick_duration_ms, 2),
+                    "server_time": isoformat(datetime.now(UTC)),
+                    "last_error": self.last_error,
+                    "last_reload_at": isoformat(self.last_reload_at),
+                    "reload_count": self.reload_count,
+                },
+                "totals": totals,
+                "groups": group_snapshots,
+                "targets": targets,
+                "alerts": {
+                    **public_alert_config(config.alerts),
+                    "recent": list(self.alert_log),
+                },
+            }
 
 
 class DeadmonASGI:
     def __init__(self, config_path: str | os.PathLike[str]) -> None:
         self.config = load_config(config_path)
         self.monitor = MonitorService(self.config)
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._previous_sighup_handler: Any = None
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] == "lifespan":
@@ -991,9 +1054,16 @@ class DeadmonASGI:
             status = 200 if snapshot["app"]["last_error"] is None else 503
             await send_json(
                 send,
-                {"ok": status == 200, "last_error": snapshot["app"]["last_error"]},
+                {
+                    "ok": status == 200,
+                    "last_error": snapshot["app"]["last_error"],
+                    "last_reload_at": snapshot["app"]["last_reload_at"],
+                    "reload_count": snapshot["app"]["reload_count"],
+                },
                 status,
             )
+        elif method == "POST" and path == "/api/reload":
+            await send_json(send, await self.reload_config())
         # elif method == "GET" and path == "/api/config":
         #    await send_json(send, public_config(self.config))
         else:
@@ -1023,13 +1093,51 @@ class DeadmonASGI:
 
         return False
 
+    async def reload_config(self) -> dict[str, Any]:
+        try:
+            new_config = load_config(self.config.path)
+            result = await self.monitor.reload_config(new_config)
+        except Exception as exc:  # noqa: BLE001 - config reload failures are fatal
+            fatal_reload_failure(self.config.path, exc)
+        self.config = new_config
+        return result
+
+    def _install_signal_handlers(self) -> None:
+        if not hasattr(signal, "SIGHUP"):
+            return
+        try:
+            self._loop = asyncio.get_running_loop()
+            self._previous_sighup_handler = signal.getsignal(signal.SIGHUP)
+            signal.signal(signal.SIGHUP, self._handle_sighup)
+        except (RuntimeError, ValueError):
+            return
+
+    def _restore_signal_handlers(self) -> None:
+        if not hasattr(signal, "SIGHUP") or self._previous_sighup_handler is None:
+            return
+        try:
+            signal.signal(signal.SIGHUP, self._previous_sighup_handler)
+        except ValueError:
+            pass
+        self._previous_sighup_handler = None
+
+    def _handle_sighup(self, _signum: int, _frame: Any) -> None:
+        if not self._loop or self._loop.is_closed():
+            return
+        self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self._reload_from_signal()))
+
+    async def _reload_from_signal(self) -> None:
+        await self.reload_config()
+
     async def _lifespan(self, receive: Any, send: Any) -> None:
         while True:
             message = await receive()
             if message["type"] == "lifespan.startup":
+                self._install_signal_handlers()
                 await self.monitor.start()
                 await send({"type": "lifespan.startup.complete"})
             elif message["type"] == "lifespan.shutdown":
+                self._restore_signal_handlers()
                 await self.monitor.stop()
                 await send({"type": "lifespan.shutdown.complete"})
                 return
@@ -1038,6 +1146,11 @@ class DeadmonASGI:
 def create_app(config_path: str | os.PathLike[str] | None = None) -> DeadmonASGI:
     path = config_path or os.environ.get("DEADMON_CONFIG") or "deadmon.conf"
     return DeadmonASGI(path)
+
+
+def fatal_reload_failure(config_path: Path, error: Exception) -> NoReturn:
+    print(f"deadmon: failed to reload config {config_path}: {error}; exiting", file=sys.stderr, flush=True)
+    os._exit(1)
 
 
 def load_config(path: str | os.PathLike[str]) -> DeadmonConfig:
@@ -1608,6 +1721,15 @@ def public_tcp(tcp: dict[str, Any] | None) -> dict[str, Any] | None:
     if not tcp:
         return None
     return dict(tcp)
+
+
+def new_target_state(target: TargetConfig, config: DeadmonConfig) -> TargetState:
+    return TargetState(
+        target,
+        retain_results=config.retain_results,
+        latency_warning_ms=effective_latency_warning_ms(target, config),
+        latency_critical_ms=effective_latency_critical_ms(target, config),
+    )
 
 
 def target_probe_label(target: TargetConfig) -> str:

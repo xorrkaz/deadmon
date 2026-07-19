@@ -145,6 +145,83 @@ Build without starting the container:
 just docker-build
 ```
 
+## Reloading Configuration
+
+Deadmon can re-read its config without restarting the process or container.
+Reloads preserve history, alert state, and consecutive success/failure counters
+for targets whose stable identity is unchanged. A target keeps its state when
+its group name, target name, and address are the same. Added targets start with
+empty history, and removed targets are dropped.
+
+The automation-friendly path is `POST /api/reload`:
+
+```sh
+curl -fsS -X POST http://127.0.0.1:8000/api/reload
+```
+
+When `app.authentication` is enabled, pass the configured Basic credentials:
+
+```sh
+curl -fsS -u "$DEADMON_USER:$DEADMON_PASSWORD" -X POST http://127.0.0.1:8000/api/reload
+```
+
+If the new config cannot be loaded, Deadmon writes the error to stderr and exits
+with a failure. With `restart: unless-stopped`, Docker will try to restart it
+and startup will keep failing until the config is fixed. On success, the JSON
+response includes preserved, added, and removed target counts.
+
+Example Ansible task:
+
+```yaml
+- name: Reload Deadmon configuration
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8000/api/reload
+    method: POST
+    status_code: 200
+```
+
+With Basic authentication:
+
+```yaml
+- name: Reload Deadmon configuration
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8000/api/reload
+    method: POST
+    url_username: "{{ deadmon_user }}"
+    url_password: "{{ deadmon_password }}"
+    force_basic_auth: true
+    status_code: 200
+```
+
+When Ansible renders the config, prefer a handler so unchanged generated output
+does not trigger a reload:
+
+```yaml
+- name: Render Deadmon configuration
+  ansible.builtin.template:
+    src: deadmon.conf.j2
+    dest: /opt/deadmon/deadmon.conf
+    mode: "0644"
+  notify: Reload Deadmon configuration
+
+handlers:
+  - name: Reload Deadmon configuration
+    ansible.builtin.uri:
+      url: http://127.0.0.1:8000/api/reload
+      method: POST
+      status_code: 200
+```
+
+Deadmon also handles `SIGHUP` as a config reload signal. This is useful when
+you do not want to expose the reload endpoint beyond localhost:
+
+```sh
+docker compose kill -s SIGHUP deadmon
+```
+
+A failed signal-triggered reload is fatal in the same way as a bad startup
+config: Deadmon logs the config error and exits.
+
 ## Alert Webhooks
 
 Slack and Webex webhook URLs should be passed as environment variables instead
@@ -298,7 +375,9 @@ curl -fsS http://127.0.0.1:8000/api/health
 ```
 
 The endpoint returns HTTP 200 when the monitor loop is healthy. It returns HTTP
-503 if the monitor has recorded a runtime error.
+503 if the monitor has recorded a runtime error. The payload also includes
+`reload_count` and `last_reload_at` so automation can inspect successful
+reloads.
 
 ## Production Checklist
 
