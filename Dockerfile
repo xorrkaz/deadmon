@@ -10,7 +10,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.16 /uv /uvx /bin/
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
-    DEADMON_CONFIG=/app/deadmon.conf \
+    DEADMON_CONFIG=/config/deadmon.conf \
     DEADMON_HOST=0.0.0.0 \
     DEADMON_PORT=8000 \
     PATH="/app/.venv/bin:$PATH"
@@ -37,4 +37,4 @@ RUN uv sync --frozen --no-dev
 EXPOSE 8000
 
 ENTRYPOINT ["/app/.venv/bin/deadmon"]
-CMD ["--host", "0.0.0.0", "--port", "8000", "/app/deadmon.conf"]
+CMD ["--host", "0.0.0.0", "--port", "8000"]

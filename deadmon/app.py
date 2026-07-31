@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
 import platform
 import re
@@ -48,6 +49,7 @@ PING_FAILED = "failed"
 PING_TIMEOUT = "timeout"
 PING_SSH_FAILED = "ssh_failed"
 DEFAULT_SNMPPING = "bundled"
+LOGGER = logging.getLogger("deadmon")
 
 SECRET_KEYS = {"password", "community", "key", "webhook_url"}
 TOP_LEVEL_KEYS = {"app", "alerts", "groups"}
@@ -85,6 +87,7 @@ GROUP_KEYS = {
     "targets",
 }
 TARGET_KEYS = {
+    "id",
     "name",
     "address",
     "note",
@@ -129,6 +132,8 @@ class TargetConfig:
     address: str
     group_id: str
     group_name: str
+    target_id: str | None = None
+    identity_key: str | None = None
     note: str = ""
     info_url: str | None = None
     relay: dict[str, Any] = field(default_factory=dict)
@@ -141,7 +146,7 @@ class TargetConfig:
 
     @property
     def stable_id(self) -> str:
-        return slugify(f"{self.group_name}-{self.name}-{self.address}")
+        return slugify(f"{self.group_id}-{self.identity_key or self.target_id or self.name}")
 
 
 @dataclass(slots=True)
@@ -1100,6 +1105,13 @@ class DeadmonASGI:
         except Exception as exc:  # noqa: BLE001 - config reload failures are fatal
             fatal_reload_failure(self.config.path, exc)
         self.config = new_config
+        LOGGER.info(
+            "reloaded config %s: %s preserved, %s added, %s removed",
+            result["config_path"],
+            result["preserved_targets"],
+            result["added_targets"],
+            result["removed_targets"],
+        )
         return result
 
     def _install_signal_handlers(self) -> None:
@@ -1235,6 +1247,7 @@ def normalize_config(raw: dict[str, Any], path: Path) -> DeadmonConfig:
 
     if not any(group.targets for group in groups):
         raise ConfigError("config contains no targets")
+    assign_target_identity_keys(groups)
 
     return DeadmonConfig(
         name=name,
@@ -1360,6 +1373,7 @@ def normalize_target(raw_target: Any, group: GroupConfig) -> TargetConfig:
         address=str(address),
         group_id=group.group_id,
         group_name=group.name,
+        target_id=optional_str(raw_target.get("id")),
         note=str(raw_target.get("note") or ""),
         info_url=optional_str(raw_target.get("info_url")),
         relay=relay,
@@ -1424,6 +1438,37 @@ def validate_allowed_keys(mapping: dict[str, Any], allowed: set[str], context: s
     if unknown:
         joined = ", ".join(unknown)
         raise ConfigError(f"{context} has unsupported field(s): {joined}")
+
+
+def assign_target_identity_keys(groups: list[GroupConfig]) -> None:
+    used: dict[str, TargetConfig] = {}
+
+    for group in groups:
+        for target in group.targets:
+            if not target.target_id:
+                continue
+            target.identity_key = target.target_id
+            existing = used.get(target.stable_id)
+            if existing:
+                raise ConfigError(
+                    "duplicate explicit target id "
+                    f"{target.target_id!r}; set a unique target id for "
+                    f"{existing.group_name}/{existing.name} or {group.name}/{target.name}"
+                )
+            used[target.stable_id] = target
+
+    for group in groups:
+        for target in group.targets:
+            if target.target_id:
+                continue
+
+            counter = 1
+            target.identity_key = target.name
+            while target.stable_id in used:
+                counter += 1
+                target.identity_key = f"{target.name}-{counter}"
+
+            used[target.stable_id] = target
 
 
 def as_config_list(value: Any, context: str) -> list[Any]:
@@ -1858,6 +1903,7 @@ def public_config(config: DeadmonConfig) -> dict[str, Any]:
                 "alerts": public_alert_config(effective_group_alert_config(group, config)),
                 "targets": [
                     {
+                        "id": target.target_id,
                         "name": target.name,
                         "address": target.address,
                         "note": target.note,

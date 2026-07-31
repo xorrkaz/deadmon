@@ -12,6 +12,7 @@ from unittest import IsolatedAsyncioTestCase
 
 from deadmon.app import (
     PING_FAILED,
+    ConfigError,
     DeadmonASGI,
     MonitorService,
     ProbeResult,
@@ -145,6 +146,80 @@ class ConfigReloadTests(IsolatedAsyncioTestCase):
         self.assertEqual(result["removed_targets"], 1)
         self.assertNotIn(old_target_id, monitor.states)
         self.assertIn(new_target_id, monitor.states)
+
+    async def test_reload_preserves_state_when_address_changes(self):
+        config = config_with_targets({"name": "router", "address": "192.0.2.10"}, threshold=1)
+        monitor = MonitorService(config)
+        target = config.targets[0]
+        state = monitor.states[target.stable_id]
+
+        state.consume(
+            ProbeResult(success=False, code=PING_FAILED, message="failed"),
+            alert_threshold=1,
+            clear_threshold=2,
+            rtt_scale_ms=10,
+        )
+
+        new_config = config_with_targets({"name": "router", "address": "192.0.2.11"}, threshold=1)
+        result = await monitor.reload_config(new_config)
+        new_target = new_config.targets[0]
+
+        self.assertEqual(target.stable_id, new_target.stable_id)
+        self.assertEqual(result["preserved_targets"], 1)
+        self.assertEqual(result["added_targets"], 0)
+        self.assertEqual(result["removed_targets"], 0)
+        self.assertIs(monitor.states[new_target.stable_id], state)
+        self.assertEqual(state.target.address, "192.0.2.11")
+        self.assertEqual(state.sent, 1)
+        self.assertTrue(state.alert_active)
+
+    async def test_reload_preserves_state_for_explicit_id_when_name_and_address_change(self):
+        config = config_with_targets(
+            {"id": "edge-router", "name": "old-name", "address": "192.0.2.10"},
+            threshold=1,
+        )
+        monitor = MonitorService(config)
+        target = config.targets[0]
+        state = monitor.states[target.stable_id]
+
+        state.consume(
+            ProbeResult(success=False, code=PING_FAILED, message="failed"),
+            alert_threshold=1,
+            clear_threshold=2,
+            rtt_scale_ms=10,
+        )
+
+        new_config = config_with_targets(
+            {"id": "edge-router", "name": "new-name", "address": "192.0.2.11"},
+            threshold=1,
+        )
+        result = await monitor.reload_config(new_config)
+        new_target = new_config.targets[0]
+
+        self.assertEqual(target.stable_id, new_target.stable_id)
+        self.assertEqual(result["preserved_targets"], 1)
+        self.assertIs(monitor.states[new_target.stable_id], state)
+        self.assertEqual(state.target.name, "new-name")
+        self.assertEqual(state.target.address, "192.0.2.11")
+        self.assertTrue(state.alert_active)
+
+    def test_duplicate_implicit_names_receive_stable_suffixes(self):
+        config = config_with_targets(
+            {"name": "router", "address": "192.0.2.10"},
+            {"name": "router", "address": "192.0.2.11"},
+        )
+
+        self.assertEqual(
+            [target.stable_id for target in config.targets],
+            ["wan-router", "wan-router-2"],
+        )
+
+    def test_duplicate_explicit_target_id_is_rejected(self):
+        with self.assertRaisesRegex(ConfigError, "duplicate explicit target id"):
+            config_with_targets(
+                {"id": "router", "name": "router-a", "address": "192.0.2.10"},
+                {"id": "router", "name": "router-b", "address": "192.0.2.11"},
+            )
 
     async def test_reload_endpoint_reloads_config_without_replacing_existing_state(self):
         with TemporaryDirectory() as tmpdir:

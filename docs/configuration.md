@@ -183,6 +183,8 @@ groups:
 
 Group-level latency thresholds are optional:
 
+- `id`: stable group identity. Use this when the group display name might
+  change.
 - `latency_warning_ms`: high-latency warning threshold for targets in the group.
 - `latency_critical_ms`: critical-latency threshold for targets in the group.
 - `alerts`: optional alert override for the group. Supports `enabled`,
@@ -197,6 +199,8 @@ Required fields:
 
 Optional fields:
 
+- `id`: stable target identity. Use this when the display name might change.
+  If omitted, Deadmon uses the target name as the stable identity.
 - `note`: dashboard note.
 - `info_url`: optional URL for a runbook, status page, monitored external URL,
   LibreNMS device page, or other operator context. Included in alerts.
@@ -210,6 +214,29 @@ Optional fields:
 Latency thresholds only classify successful probes. Lost probes are tracked
 separately as reachability failures and are the only condition that contributes
 to active and cleared alert thresholds.
+
+Deadmon preserves target history and alert counters across config reloads by
+matching stable target identity, not address. The identity is the group id plus
+the target `id` when set, otherwise the group id plus the target `name`. Address
+changes therefore preserve state for the same named target.
+
+When multiple targets in a group have the same name and no explicit `id`,
+Deadmon assigns deterministic suffixes in config order, such as `router` and
+`router-2`. That prevents startup failures, but identity then depends on target
+order. For generated configs, set explicit target `id` values when names are not
+unique or may change.
+
+For rename-safe automation, set both group and target ids:
+
+```yaml
+groups:
+  - id: wan
+    name: WAN Edge
+    targets:
+      - id: primary-transit
+        name: Transit A
+        address: 192.0.2.10
+```
 
 Example with global, group, and target-specific latency thresholds:
 

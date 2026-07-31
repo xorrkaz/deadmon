@@ -22,7 +22,7 @@ pip install deadmon
 Run using the Docker Hub image:
 
 ```sh
-docker run --rm -p 8000:8000 xorrkaz/deadmon
+docker run --rm -p 8000:8000 -v "$(pwd):/config:ro" xorrkaz/deadmon
 ```
 
 ## Run locally

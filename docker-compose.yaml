@@ -11,7 +11,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DEADMON_CONFIG: /app/deadmon.conf
+      DEADMON_CONFIG: /config/deadmon.conf
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       WEBEX_WEBHOOK_URL: ${WEBEX_WEBHOOK_URL:-}
     sysctls:
@@ -22,7 +22,7 @@ services:
       # Enable NET_ADMIN and host-specific mounts if you use netns or VRF probes.
       # - NET_ADMIN
     volumes:
-      - ./deadmon.conf:/app/deadmon.conf:ro
+      - ./:/config:ro
     networks:
       - deadmon
 

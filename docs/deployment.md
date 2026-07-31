@@ -65,20 +65,24 @@ just docker-up
 ```
 
 The service listens on host port `8000` by default. The compose file bind-mounts
-`./deadmon.conf` into the container as `/app/deadmon.conf`.
+the current directory into the container as `/config` and reads
+`/config/deadmon.conf`. Mounting a directory is deliberate: Ansible's default
+template behavior writes a new file and renames it into place, and Docker
+single-file bind mounts can keep pointing at the old inode.
 
 ## Docker Hub Image
 
-Run the published image directly without building locally:
+Run the published image directly without building locally, mounting the
+directory that contains `deadmon.conf`:
 
 ```sh
-docker run --rm -p 8000:8000 xorrkaz/deadmon
+docker run --rm -p 8000:8000 -v "$(pwd):/config:ro" xorrkaz/deadmon
 ```
 
-If you want to mount a configuration file, use:
+For production, prefer a dedicated config directory:
 
 ```sh
-docker run --rm -p 8000:8000 -v "$(pwd)/deadmon.conf:/app/deadmon.conf:ro" xorrkaz/deadmon
+docker run --rm -p 8000:8000 -v /opt/deadmon/config:/config:ro xorrkaz/deadmon
 ```
 
 The published image uses the same runtime environment and should work with the
@@ -193,14 +197,15 @@ With Basic authentication:
     status_code: 200
 ```
 
-When Ansible renders the config, prefer a handler so unchanged generated output
-does not trigger a reload:
+When Ansible renders the config, write it into the directory that is mounted as
+`/config`, and prefer a handler so unchanged generated output does not trigger
+a reload:
 
 ```yaml
 - name: Render Deadmon configuration
   ansible.builtin.template:
     src: deadmon.conf.j2
-    dest: /opt/deadmon/deadmon.conf
+    dest: /opt/deadmon/config/deadmon.conf
     mode: "0644"
   notify: Reload Deadmon configuration
 
@@ -219,8 +224,16 @@ you do not want to expose the reload endpoint beyond localhost:
 docker compose kill -s SIGHUP deadmon
 ```
 
+A successful reload writes a log line with the config path and the preserved,
+added, and removed target counts.
+
 A failed signal-triggered reload is fatal in the same way as a bad startup
 config: Deadmon logs the config error and exits.
+
+If `reload_count` increments but the running target data does not change, check
+for a single-file Docker bind mount. With Ansible's atomic writes, a mount such
+as `./deadmon.conf:/app/deadmon.conf:ro` can leave the container reading the old
+file. Mount the parent directory instead.
 
 ## Alert Webhooks
 
