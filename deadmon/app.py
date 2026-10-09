@@ -493,7 +493,7 @@ class ProbeRunner:
         if target.source:
             if osname == "Linux":
                 cmd += ["-I", target.source]
-            elif osname == "Darwin":
+            elif osname == "Darwin" or osname == "FreeBSD":
                 cmd += ["-S", target.source]
             else:
                 return ProbeResult(code=PING_FAILED, message=f"source is not supported on {osname}")
