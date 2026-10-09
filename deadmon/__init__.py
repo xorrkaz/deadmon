@@ -5,6 +5,16 @@
 
 """Deadmon web reachability monitor."""
 
+from importlib import metadata
+
 __all__ = ["__version__"]
 
-__version__ = "1.0.0"
+
+def _detect_version() -> str:
+    try:
+        return metadata.version("deadmon")
+    except metadata.PackageNotFoundError:
+        return "0.0.0+unknown"
+
+
+__version__ = _detect_version()

@@ -22,28 +22,12 @@ import urllib.request
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from importlib import metadata
 from pathlib import Path
 from shutil import which
 from typing import Any, NoReturn
 
+from deadmon import __version__ as APP_VERSION
 
-def _detect_version() -> str:
-    try:
-        return metadata.version("deadmon")
-    except metadata.PackageNotFoundError:
-        pass
-    import tomllib
-
-    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
-    try:
-        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-        return str(data["project"]["version"])
-    except (OSError, KeyError, tomllib.TOMLDecodeError):
-        return "0.0.0"
-
-
-APP_VERSION = _detect_version()
 PING_SUCCESS = "success"
 PING_FAILED = "failed"
 PING_TIMEOUT = "timeout"
