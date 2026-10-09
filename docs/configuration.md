@@ -327,7 +327,7 @@ included in the sanitized config output from `--dump-config`.
   source: wan0
 ```
 
-Linux uses `ping -I`. macOS uses `ping -S`.
+Linux uses `ping -I`. macOS and FreeBSD use `ping -S`.
 
 ## SSH Relay
 
